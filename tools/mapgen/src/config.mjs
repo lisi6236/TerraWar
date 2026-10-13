@@ -36,13 +36,13 @@ export const EUROPE_BBOX = { minLon: -12, maxLon: 32, minLat: 35, maxLat: 71 };
 
 /** 国家元数据（ISO A3 -> 中文名 + 颜色） */
 export const NATION_META = {
-  FRA: { name: "法国", color: "#3b6fd4" },
-  DEU: { name: "德国", color: "#4d4d55" },
-  ITA: { name: "意大利", color: "#3f9e57" },
-  ESP: { name: "西班牙", color: "#c9a227" },
-  POL: { name: "波兰", color: "#c0504d" },
-  GBR: { name: "英国", color: "#7a4fbf" },
-  AUT: { name: "奥地利", color: "#d97b2b" },
+  FRA: { name: "法国", color: "#3b6fd4", capital: [2.3522, 48.8566], capitalName: "巴黎" },
+  DEU: { name: "德国", color: "#4d4d55", capital: [13.405, 52.52], capitalName: "柏林" },
+  ITA: { name: "意大利", color: "#3f9e57", capital: [12.4964, 41.9028], capitalName: "罗马" },
+  ESP: { name: "西班牙", color: "#c9a227", capital: [-3.7038, 40.4168], capitalName: "马德里" },
+  POL: { name: "波兰", color: "#c0504d", capital: [21.0122, 52.2297], capitalName: "华沙" },
+  GBR: { name: "英国", color: "#7a4fbf", capital: [-0.1276, 51.5072], capitalName: "伦敦" },
+  AUT: { name: "奥地利", color: "#d97b2b", capital: [16.3738, 48.2082], capitalName: "维也纳" },
   BEL: { name: "比利时", color: "#9aa7b0" },
   NLD: { name: "荷兰", color: "#d4a017" },
   LUX: { name: "卢森堡", color: "#8fbf7a" },

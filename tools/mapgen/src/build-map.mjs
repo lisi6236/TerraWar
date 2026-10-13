@@ -161,38 +161,52 @@ function computeProvinceAdjacency(units, provinces, unitAdj) {
 }
 
 function finalize(provinces, adjacency, map) {
+  // 首都：可玩国家取最靠近该国质心的省份（先算首都，再生成 feature，避免改到副本）
+  const capitals = new Set();
+  const capitalNameById = new Map();
+  for (const iso of map.playable) {
+    const own = provinces.filter((p) => p.iso === iso);
+    if (!own.length) continue;
+    const cap = NATION_META[iso]?.capital;
+    let target;
+    if (cap) {
+      target = { x: cap[0], y: cap[1] };
+    } else {
+      const totalArea = own.reduce((s, p) => s + p.area, 0);
+      target = {
+        x: own.reduce((s, p) => s + p.centroid.x * p.area, 0) / totalArea,
+        y: own.reduce((s, p) => s + p.centroid.y * p.area, 0) / totalArea,
+      };
+    }
+    let best = own[0], bd = Infinity;
+    for (const p of own) { const d = distance(p.centroid, target); if (d < bd) { bd = d; best = p; } }
+    capitals.add(best.id);
+    if (NATION_META[iso]?.capitalName) capitalNameById.set(best.id, NATION_META[iso].capitalName);
+  }
   // 空白未占领区用低调的地形色，已归属省份用国家色（政治填色）
   const TERRAIN_TONE = { plain: "#cdc7b6", hills: "#bcb29c", mountain: "#a89c8b", forest: "#a3b197", urban: "#b6ada0", desert: "#cfbc92", coast: "#cdc7b6", island: "#cdc7b6" };
-  const features = provinces.map((p, i) => ({
+  const DEFENSE = { plain: 1.0, hills: 1.15, mountain: 1.3, forest: 1.2, desert: 0.9, urban: 1.25, coast: 1.0, island: 1.1 };
+
+  return provinces.map((p, i) => ({
     type: "Feature",
     properties: {
       ...p.properties,
+      isCapital: capitals.has(p.id),
+      name: capitalNameById.get(p.id) ?? p.properties.name,
       color: p.properties.ownerAtStart
         ? (NATION_META[p.properties.ownerAtStart]?.color || "#c9c3b4")
         : (TERRAIN_TONE[p.properties.terrain] || "#cdc7b6"),
       adjacency: adjacency[i],
+      defenseBonus: DEFENSE[p.properties.terrain] ?? 1.0,
       base: {
         steel: p.properties.isCore ? 6 : 2,
         oil: p.properties.isCore ? 3 : 1,
         food: p.properties.isCore ? 9 : 3,
         fund: 5,
       },
-      defenseBonus: { plain: 1.0, hills: 1.15, mountain: 1.3, forest: 1.2, desert: 0.9, urban: 1.25 }[p.properties.terrain] ?? 1.0,
     },
     geometry: { type: "MultiPolygon", coordinates: p.coords },
   }));
-
-  // 首都：可玩国家取最靠近该国质心的省份
-  for (const iso of map.playable) {
-    const own = provinces.filter((p) => p.iso === iso);
-    if (!own.length) continue;
-    const cx = own.reduce((s, p) => s + p.centroid.x * p.area, 0) / own.reduce((s, p) => s + p.area, 0);
-    const cy = own.reduce((s, p) => s + p.centroid.y * p.area, 0) / own.reduce((s, p) => s + p.area, 0);
-    let best = own[0], bd = Infinity;
-    for (const p of own) { const d = distance(p.centroid, { x: cx, y: cy }); if (d < bd) { bd = d; best = p; } }
-    best.properties.isCapital = true;
-  }
-  return features;
 }
 
 export async function buildAllMaps() {
