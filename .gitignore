@@ -13,6 +13,10 @@ out/
 .env.*
 personal access tokens.txt
 
+# 地图原始数据 / 临时缓存（不进版本库）
+tools/mapgen/data/*
+!tools/mapgen/data/.gitkeep
+
 # 编辑器 / 系统
 .vscode/
 .idea/

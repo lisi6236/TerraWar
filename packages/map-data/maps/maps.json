@@ -1,0 +1,256 @@
+{
+  "maps": [
+    {
+      "id": "europe-3",
+      "name": "欧洲 · 3 国",
+      "difficulty": 3,
+      "provinceCount": 30,
+      "playable": [
+        "FRA",
+        "DEU",
+        "ITA"
+      ],
+      "nations": {
+        "FRA": {
+          "name": "法国",
+          "color": "#3b6fd4"
+        },
+        "DEU": {
+          "name": "德国",
+          "color": "#4d4d55"
+        },
+        "ITA": {
+          "name": "意大利",
+          "color": "#3f9e57"
+        },
+        "ESP": {
+          "name": "西班牙",
+          "color": "#c9a227"
+        },
+        "POL": {
+          "name": "波兰",
+          "color": "#c0504d"
+        },
+        "GBR": {
+          "name": "英国",
+          "color": "#7a4fbf"
+        },
+        "AUT": {
+          "name": "奥地利",
+          "color": "#d97b2b"
+        },
+        "BEL": {
+          "name": "比利时",
+          "color": "#9aa7b0"
+        },
+        "NLD": {
+          "name": "荷兰",
+          "color": "#d4a017"
+        },
+        "LUX": {
+          "name": "卢森堡",
+          "color": "#8fbf7a"
+        },
+        "CHE": {
+          "name": "瑞士",
+          "color": "#b5453b"
+        },
+        "CZE": {
+          "name": "捷克",
+          "color": "#5f9ea0"
+        },
+        "DNK": {
+          "name": "丹麦",
+          "color": "#b06fa8"
+        },
+        "SVN": {
+          "name": "斯洛文尼亚",
+          "color": "#6f8fbf"
+        },
+        "HRV": {
+          "name": "克罗地亚",
+          "color": "#cf8b6a"
+        },
+        "HUN": {
+          "name": "匈牙利",
+          "color": "#8a9a5b"
+        },
+        "PRT": {
+          "name": "葡萄牙",
+          "color": "#4f7f6f"
+        }
+      },
+      "file": "europe-3.topojson.json"
+    },
+    {
+      "id": "europe-5",
+      "name": "欧洲 · 5 国",
+      "difficulty": 5,
+      "provinceCount": 50,
+      "playable": [
+        "FRA",
+        "DEU",
+        "ITA",
+        "ESP",
+        "POL"
+      ],
+      "nations": {
+        "FRA": {
+          "name": "法国",
+          "color": "#3b6fd4"
+        },
+        "DEU": {
+          "name": "德国",
+          "color": "#4d4d55"
+        },
+        "ITA": {
+          "name": "意大利",
+          "color": "#3f9e57"
+        },
+        "ESP": {
+          "name": "西班牙",
+          "color": "#c9a227"
+        },
+        "POL": {
+          "name": "波兰",
+          "color": "#c0504d"
+        },
+        "GBR": {
+          "name": "英国",
+          "color": "#7a4fbf"
+        },
+        "AUT": {
+          "name": "奥地利",
+          "color": "#d97b2b"
+        },
+        "BEL": {
+          "name": "比利时",
+          "color": "#9aa7b0"
+        },
+        "NLD": {
+          "name": "荷兰",
+          "color": "#d4a017"
+        },
+        "LUX": {
+          "name": "卢森堡",
+          "color": "#8fbf7a"
+        },
+        "CHE": {
+          "name": "瑞士",
+          "color": "#b5453b"
+        },
+        "CZE": {
+          "name": "捷克",
+          "color": "#5f9ea0"
+        },
+        "DNK": {
+          "name": "丹麦",
+          "color": "#b06fa8"
+        },
+        "SVN": {
+          "name": "斯洛文尼亚",
+          "color": "#6f8fbf"
+        },
+        "HRV": {
+          "name": "克罗地亚",
+          "color": "#cf8b6a"
+        },
+        "HUN": {
+          "name": "匈牙利",
+          "color": "#8a9a5b"
+        },
+        "PRT": {
+          "name": "葡萄牙",
+          "color": "#4f7f6f"
+        }
+      },
+      "file": "europe-5.topojson.json"
+    },
+    {
+      "id": "europe-7",
+      "name": "欧洲 · 7 国",
+      "difficulty": 7,
+      "provinceCount": 70,
+      "playable": [
+        "FRA",
+        "DEU",
+        "ITA",
+        "ESP",
+        "POL",
+        "GBR",
+        "AUT"
+      ],
+      "nations": {
+        "FRA": {
+          "name": "法国",
+          "color": "#3b6fd4"
+        },
+        "DEU": {
+          "name": "德国",
+          "color": "#4d4d55"
+        },
+        "ITA": {
+          "name": "意大利",
+          "color": "#3f9e57"
+        },
+        "ESP": {
+          "name": "西班牙",
+          "color": "#c9a227"
+        },
+        "POL": {
+          "name": "波兰",
+          "color": "#c0504d"
+        },
+        "GBR": {
+          "name": "英国",
+          "color": "#7a4fbf"
+        },
+        "AUT": {
+          "name": "奥地利",
+          "color": "#d97b2b"
+        },
+        "BEL": {
+          "name": "比利时",
+          "color": "#9aa7b0"
+        },
+        "NLD": {
+          "name": "荷兰",
+          "color": "#d4a017"
+        },
+        "LUX": {
+          "name": "卢森堡",
+          "color": "#8fbf7a"
+        },
+        "CHE": {
+          "name": "瑞士",
+          "color": "#b5453b"
+        },
+        "CZE": {
+          "name": "捷克",
+          "color": "#5f9ea0"
+        },
+        "DNK": {
+          "name": "丹麦",
+          "color": "#b06fa8"
+        },
+        "SVN": {
+          "name": "斯洛文尼亚",
+          "color": "#6f8fbf"
+        },
+        "HRV": {
+          "name": "克罗地亚",
+          "color": "#cf8b6a"
+        },
+        "HUN": {
+          "name": "匈牙利",
+          "color": "#8a9a5b"
+        },
+        "PRT": {
+          "name": "葡萄牙",
+          "color": "#4f7f6f"
+        }
+      },
+      "file": "europe-7.topojson.json"
+    }
+  ]
+}

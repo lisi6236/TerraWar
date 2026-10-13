@@ -1,0 +1,13 @@
+{
+  "name": "terrawar",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "packageManager": "pnpm@11.22.0",
+  "scripts": {
+    "mapgen": "pnpm --filter @terrawar/mapgen start",
+    "dev": "pnpm --filter @terrawar/web dev",
+    "build": "pnpm --filter @terrawar/web build",
+    "typecheck": "pnpm -r typecheck"
+  }
+}
