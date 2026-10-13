@@ -17,13 +17,19 @@ packages/map-data  生成好的地图数据（TopoJSON）
 tools/mapgen       地图生成工具（行政区划 -> 省份聚类 -> 邻接 -> TopoJSON）
 ```
 
-## 快速开始
+## 一键启动
+- **Windows**：双击 `start.bat`（会依次检查依赖 → 启动本地服务器 → 自动打开浏览器）
+- **Git Bash / WSL / macOS / Linux**：`bash start.sh`（或 `chmod +x start.sh && ./start.sh`）
+- 默认端口 `5175`，可用环境变量覆盖：`PORT=6000 bash start.sh`
+
+## 手动命令
 ```bash
 pnpm install        # 安装依赖
 pnpm mapgen         # 生成地图数据（输出到 packages/map-data/maps）
 pnpm dev            # 启动前端开发服务器
 pnpm build          # 构建前端
 pnpm typecheck      # 全量类型检查
+pnpm --filter @terrawar/engine test   # 运行引擎单测
 ```
 
 ## 当前进度
