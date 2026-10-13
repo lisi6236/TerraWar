@@ -130,3 +130,7 @@ button.mini { margin-left: 8px; background: transparent; border: 1px solid var(-
 .split-ctl .split-btn path { fill: #cfd8e3; }
 .split-ctl .split-btn:hover path { fill: #1a1a1a; }
 .notice { margin-top: 8px; padding: 6px 9px; border-radius: 6px; background: #33301f; border: 1px solid #6b5a24; color: #e0cf99; font-size: 12px; }
+/* ---------- 顶栏操作 / 存档提示 ---------- */
+.topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.topbar-actions button[disabled] { opacity: .4; cursor: not-allowed; }
+.flash { color: var(--accent); font-size: 12px; }

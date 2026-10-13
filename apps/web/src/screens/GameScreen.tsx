@@ -4,7 +4,9 @@ import { SPLIT_STEP } from "@terrawar/shared";
 import {
   computeEconomy, createGame, endTurn, indexMap, reachableProvinces, unitsIn, validateOrders,
 } from "@terrawar/engine";
+import { generateAiOrders } from "@terrawar/engine";
 import { MapView } from "../map/MapView";
+import { hasSave, loadGame, saveGame } from "../game/save";
 import { TERRAIN_LABEL } from "../map/types";
 
 interface Props {
@@ -145,7 +147,7 @@ export function GameScreen({ topo, mapData, seed, onExit }: Props) {
   function handleEndTurn() {
     const errs = validateOrders(state, mapIndex, orders);
     if (errs.length) { window.alert(errs.join("\n")); return; }
-    setState(endTurn(state, mapIndex, orders));
+    setState(endTurn(state, mapIndex, [...orders, ...generateAiOrders(state, mapIndex)]));
     setOrders([]);
     setSelectedUnitId(null);
     setNotice("");
@@ -153,6 +155,15 @@ export function GameScreen({ topo, mapData, seed, onExit }: Props) {
 
   const selProv = selectedProvinceId ? state.provinces[selectedProvinceId] : null;
   const selProvStatic = selectedProvinceId ? mapIndex.byId[selectedProvinceId] : null;
+  const slot = mapData.id;
+  const canLoad = hasSave(slot);
+  const [flash, setFlash] = useState("");
+  function doSave() { saveGame(slot, state); setFlash("已保存进度"); }
+  function doLoad() {
+    const s = loadGame(slot);
+    if (!s) { setFlash("没有找到存档"); return; }
+    setState(s); setOrders([]); setSelectedUnitId(null); setSelectedProvinceId(null); setNotice(""); setFlash("已读取存档");
+  }
   const recentLogs = state.log.slice(-26).reverse();
   const others = Object.values(state.nations).filter((n) => n.id !== state.playerNation);
 
@@ -166,7 +177,12 @@ export function GameScreen({ topo, mapData, seed, onExit }: Props) {
           <b>{player?.name}</b>
         </div>
         <div className="meta">第 <b>{state.turn}</b> 回合 · 领土 {ownedCount} 省</div>
-        <button className="ghost" onClick={onExit} style={{ marginLeft: "auto" }}>返回菜单</button>
+        <div className="topbar-actions">
+          {flash && <span className="flash">{flash}</span>}
+          <button className="ghost" onClick={doSave}>保存</button>
+          <button className="ghost" onClick={doLoad} disabled={!canLoad}>读取</button>
+          <button className="ghost" onClick={onExit}>返回菜单</button>
+        </div>
       </header>
 
       <div className="body">

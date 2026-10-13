@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { feature } from "topojson-client";
 import type { MapData, Province } from "@terrawar/shared";
-import { createGame, endTurn, indexMap, reachableProvinces, unitsIn } from "../index";
+import { createGame, endTurn, generateAiOrders, indexMap, reachableProvinces, unitsIn } from "../index";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const MAPS_DIR = path.resolve(here, "../../../../packages/map-data/maps");
@@ -129,5 +129,21 @@ describe("真实地图上的进攻（战斗结算）", () => {
     expect(after.provinces[pair!.to].owner).toBe(me);
     expect(after.units[attacker.id]?.province).toBe(pair!.to);
     expect(after.log.some((l) => l.kind === "battle")).toBe(true);
+  });
+});
+describe("AI 在真实地图上的扩张", () => {
+  it("连续数回合后 AI 国家会占领空白省份", () => {
+    const map = loadMap("europe-5.topojson.json");
+    const idx = indexMap(map);
+    let s = createGame(map, { seed: 20261013 });
+    const owned = (st: any, n: string) => Object.values(st.provinces).filter((p: any) => p.owner === n).length;
+    const before: Record<string, number> = {};
+    for (const n of map.playable) before[n] = owned(s, n);
+
+    for (let i = 0; i < 6; i++) s = endTurn(s, idx, generateAiOrders(s, idx));
+
+    const gained = map.playable.some((n) => owned(s, n) > before[n]);
+    expect(gained).toBe(true);
+    expect(s.turn).toBe(7);
   });
 });

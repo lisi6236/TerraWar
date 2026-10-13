@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MapData, Province } from "@terrawar/shared";
-import { canOrderMove, createGame, endTurn, indexMap, reachableProvinces, unitsIn } from "../index";
+import { canOrderMove, createGame, endTurn, generateAiOrders, indexMap, reachableProvinces, unitsIn } from "../index";
 
 /** 造一张 5 块地的测试地图： A - B - C - D - E */
 function makeMap(): MapData {
@@ -197,5 +197,40 @@ describe("经济", () => {
     // FRA 拥有 A（首都，资金 x1.5）与 B：产出 round(7.5 + 5) = 13；维护 2 个军团 = 10
     expect(after.nations.FRA.resources.fund).toBe(before + 13 - 10);
     expect(after.turn).toBe(2);
+  });
+});
+
+describe("AI 决策", () => {
+  it("不会为玩家国家生成指令", () => {
+    const map = makeMap();
+    const s = createGame(map, { seed: 41, playerNation: "FRA" });
+    const orders = generateAiOrders(s, indexMap(map));
+    expect(orders.length).toBeGreaterThan(0);
+    expect(orders.every((o) => s.units[o.unitId].owner !== "FRA")).toBe(true);
+  });
+
+  it("AI 会向相邻空白省份扩张（并入结算后确实占领）", () => {
+    const map = makeMap();
+    const m = indexMap(map);
+    let s = createGame(map, { seed: 43, playerNation: "FRA" });
+    const ita = Object.values(s.units).find((u: any) => u.owner === "ITA") as any;
+    ita.province = "D";
+    const aiOrders = generateAiOrders(s, m);
+    s = endTurn(s, m, aiOrders);
+    expect(s.provinces.C.owner).toBe("ITA");
+  });
+
+  it("劣势时 AI 不会硬攻敌方重兵", () => {
+    const map = makeMap();
+    const m = indexMap(map);
+    const s = createGame(map, { seed: 47, playerNation: "FRA" });
+    const ita = Object.values(s.units).find((u: any) => u.owner === "ITA") as any;
+    ita.province = "D";
+    ita.strength = 50;
+    const fra = Object.values(s.units).find((u: any) => u.owner === "FRA" && u.province === "B") as any;
+    fra.province = "C";
+    fra.strength = 200;
+    const aiOrders = generateAiOrders(s, m);
+    expect(aiOrders.some((o) => o.to === "C")).toBe(false);
   });
 });
