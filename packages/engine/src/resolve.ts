@@ -1,6 +1,7 @@
 // 回合结算总入口（顺序见 docs/开发计划与实现方案.md 附录 A.1）
 import type { GameState, Order } from "@terrawar/shared";
 import { resolveMovements } from "./movement";
+import { mergeStacks } from "./stack";
 import { decayResistance, resolveOccupation } from "./occupation";
 import { resolveEconomy } from "./economy";
 import type { MapIndex } from "./state";
@@ -11,7 +12,8 @@ export function endTurn(state: GameState, map: MapIndex, orders: Order[]): GameS
   const s: GameState = structuredClone(state);
   s.phase = "resolve";
 
-  resolveMovements(s, map, orders);   // 2. 移动与冲突裁决
+  resolveMovements(s, map, orders);   // 2. 移动 / 分兵 / 进攻与冲突裁决
+  mergeStacks(s, map);                // 2.5 同兵种合并
   resolveOccupation(s, map);          // 3. 占领与抵抗
   decayResistance(s, map);            // 4. 抵抗衰减
   resolveEconomy(s, map);             // 5. 资源产出与维护

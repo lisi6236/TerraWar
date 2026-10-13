@@ -1,12 +1,36 @@
-// 移动与冲突裁决（M1 简化版，见 docs/开发计划与实现方案.md 附录 A.2）
+// 移动、分兵、进攻与冲突裁决
+// 规则见 docs/开发计划与实现方案.md 附录 A / B
 import type { GameState, Order, ProvinceId, Unit } from "@terrawar/shared";
-import { GARRISON_CAPACITY } from "@terrawar/shared";
-import { pushLog, unitsIn, type MapIndex } from "./state";
+import { LAND_CAPACITY_STRENGTH, MORALE, MORALE_LOSS, MORALE_WIN, SPLIT_STEP } from "@terrawar/shared";
+import { pushLog, spawnUnit, unitsIn, type MapIndex } from "./state";
+import { resolveBattle } from "./combat";
 
-/** 单位可移动到的地块（相邻 + 陆地 + 未被敌军占据 + 容量未满） */
+export function unitLabel(state: GameState, u: Unit): string {
+  const nation = state.nations[u.owner]?.name ?? u.owner;
+  return `${nation}部队(${u.id})`;
+}
+
+function clampMorale(v: number): number {
+  return Math.max(MORALE.min, Math.min(MORALE.max, v));
+}
+
+function removeUnit(state: GameState, u: Unit): void {
+  delete state.units[u.id];
+}
+
+/** 当前真正"驻守"在该地块的单位（排除尚未抵达的移动单位） */
+function occupantsOf(state: GameState, province: ProvinceId, moving: Set<string>): Unit[] {
+  return unitsIn(state, province).filter((u) => !moving.has(u.id));
+}
+
+function strengthUnits(units: Unit[], owner: string): number {
+  return units.filter((u) => u.owner === owner).reduce((s, u) => s + u.strength, 0);
+}
+
+/** 可移动 / 可进攻的地块：相邻 + 陆地；敌占也可（转为进攻） */
 export function reachableProvinces(state: GameState, map: MapIndex, unitId: string): ProvinceId[] {
   const u = state.units[unitId];
-  if (!u) return [];
+  if (!u || u.strength <= 0) return [];
   const from = map.byId[u.province];
   if (!from) return [];
   const out: ProvinceId[] = [];
@@ -14,9 +38,8 @@ export function reachableProvinces(state: GameState, map: MapIndex, unitId: stri
     const target = map.byId[to];
     if (!target || target.kind !== "land") continue;
     const here = unitsIn(state, to);
-    if (here.some((x) => x.owner !== u.owner)) continue;               // 有敌军 → M1 不可进入
-    const friendly = here.filter((x) => x.owner === u.owner).length;
-    if (friendly >= GARRISON_CAPACITY) continue;                        // 驻军容量已满
+    if (here.some((x) => x.owner !== u.owner)) { out.push(to); continue; }   // 敌占 -> 进攻
+    if (strengthUnits(here, u.owner) >= LAND_CAPACITY_STRENGTH) continue;   // 己方驻军已满
     out.push(to);
   }
   return out;
@@ -26,42 +49,67 @@ export function canOrderMove(state: GameState, map: MapIndex, unitId: string, to
   return reachableProvinces(state, map, unitId).includes(to);
 }
 
-/** 执行移动与冲突裁决（就地修改 state） */
+/** 败退目的地：相邻陆地、无敌军、且为己方或空白地块 */
+function findRetreat(state: GameState, map: MapIndex, u: Unit): ProvinceId | null {
+  const from = map.byId[u.province];
+  if (!from) return null;
+  for (const id of from.adjacency.filter((x) => map.byId[x]?.kind === "land").sort()) {
+    const here = unitsIn(state, id);
+    if (here.some((x) => x.owner !== u.owner)) continue;
+    const owner = state.provinces[id]?.owner ?? null;
+    if (owner !== null && owner !== u.owner) continue;
+    if (strengthUnits(here, u.owner) + u.strength > LAND_CAPACITY_STRENGTH) continue;
+    return id;
+  }
+  return null;
+}
+
 export function resolveMovements(state: GameState, map: MapIndex, orders: Order[]): void {
-  const movers = new Set<string>();
+  const moves = orders
+    .filter((o) => o.type === "move")
+    .slice()
+    .sort((a, b) => (a.unitId < b.unitId ? -1 : 1));
+
   const plans: { unit: Unit; from: ProvinceId; to: ProvinceId }[] = [];
 
-  for (const o of orders) {
-    if (o.type !== "move") continue;
-    const u = state.units[o.unitId];
-    if (!u) continue;
-    if (o.to === u.province) continue;
-    const from = map.byId[u.province];
+  // 1) 展开指令（含按住 Ctrl 的分兵）
+  for (const o of moves) {
+    const src = state.units[o.unitId];
+    if (!src || src.strength <= 0) continue;
+    if (o.to === src.province) continue;
+    const from = map.byId[src.province];
     const target = map.byId[o.to];
     if (!from || !target) continue;
     if (!from.adjacency.includes(o.to)) {
-      pushLog(state, "block", `${unitLabel(state, u)} 无法移动到不相邻的地块`);
+      pushLog(state, "block", `${unitLabel(state, src)} 无法移动到不相邻的地块`);
       continue;
     }
     if (target.kind !== "land") {
-      pushLog(state, "block", `${unitLabel(state, u)} 是陆军，无法进入海域（跨海需海军运输，M4 开放）`);
+      pushLog(state, "block", `${unitLabel(state, src)} 是陆军，无法进入海域（跨海需海军运输，M4 开放）`);
       continue;
     }
-    movers.add(u.id);
-    plans.push({ unit: u, from: u.province, to: o.to });
+
+    let mover = src;
+    const want = o.strength ?? src.strength;
+    if (want > 0 && want < src.strength) {
+      const raw = Math.round(want / SPLIT_STEP) * SPLIT_STEP;
+      const send = Math.max(SPLIT_STEP, Math.min(raw, src.strength - SPLIT_STEP));
+      if (send > 0 && send < src.strength) {
+        src.strength -= send;
+        mover = spawnUnit(state, src.type, src.owner, src.province);
+        mover.strength = send;
+        mover.morale = src.morale;
+        mover.supply = src.supply;
+        if (src.general) mover.general = { ...src.general };
+        pushLog(state, "move", `${unitLabel(state, src)} 分出 ${send} 兵力出击`);
+      }
+    }
+    plans.push({ unit: mover, from: src.province, to: o.to });
   }
 
-  // 未下移动指令的单位 = 驻守者
-  const stayersByProv = new Map<ProvinceId, Unit[]>();
-  for (const u of Object.values(state.units)) {
-    if (movers.has(u.id)) continue;
-    const arr = stayersByProv.get(u.province) ?? [];
-    arr.push(u);
-    stayersByProv.set(u.province, arr);
-  }
-
-  // 按目标地块分组
-  const groups = new Map<ProvinceId, { unit: Unit; from: ProvinceId; to: ProvinceId }[]>();
+  // 2) 按目标地块分组，逐批处理（战力降序 + id 升序，保证确定性）
+  const moving = new Set(plans.map((p) => p.unit.id));
+  const groups = new Map<ProvinceId, typeof plans>();
   for (const p of plans) {
     const arr = groups.get(p.to) ?? [];
     arr.push(p);
@@ -69,43 +117,66 @@ export function resolveMovements(state: GameState, map: MapIndex, orders: Order[
   }
 
   for (const [to, list] of groups) {
-    // 确定性排序：战力降序，id 升序
-    list.sort((a, b) =>
-      b.unit.strength - a.unit.strength || (a.unit.id < b.unit.id ? -1 : 1));
+    const province = map.byId[to];
+    list.sort((a, b) => b.unit.strength - a.unit.strength || (a.unit.id < b.unit.id ? -1 : 1));
 
-    const stayers = stayersByProv.get(to) ?? [];
-    const incomingOwner = list[0].unit.owner;
-    const hostileStayers = stayers.filter((u) => u.owner !== incomingOwner);
-    if (hostileStayers.length) {
-      for (const p of list) {
-        pushLog(state, "block", `${unitLabel(state, p.unit)} 进攻 ${map.byId[to].name} 被守军阻挡（M2 起进入战斗结算）`);
-      }
-      continue; // M1：无战斗，全部退回出发地
-    }
-
-    let occupied = stayers.filter((u) => u.owner === incomingOwner).length;
-    const ownerOfProvince = state.provinces[to]?.owner ?? null;
-    let firstArrived = false;
     for (const p of list) {
-      const sameOwner = p.unit.owner === incomingOwner;
-      if (!firstArrived || sameOwner) {
-        if (occupied < GARRISON_CAPACITY) {
-          p.unit.province = to;
-          occupied += 1;
-          firstArrived = true;
-          pushLog(state, "move", `${unitLabel(state, p.unit)} 从 ${map.byId[p.from].name} 移动到 ${map.byId[to].name}`);
-        } else {
-          pushLog(state, "block", `${unitLabel(state, p.unit)} 无法进入 ${map.byId[to].name}：驻军容量已满`);
+      if (!state.units[p.unit.id] || p.unit.strength <= 0) continue;
+      moving.delete(p.unit.id);   // 该单位已抵达处理点：此后它算作地块驻军
+
+      const here = occupantsOf(state, to, moving);
+      const hostile = here.filter((u) => u.owner !== p.unit.owner);
+
+      // 2.1 无敌方驻军 -> 直接进入
+      if (!hostile.length) {
+        if (strengthUnits(here, p.unit.owner) + p.unit.strength > LAND_CAPACITY_STRENGTH) {
+          pushLog(state, "block", `${unitLabel(state, p.unit)} 无法进入 ${province.name}：驻军已达上限 ${LAND_CAPACITY_STRENGTH}`);
+          continue;
         }
+        p.unit.province = to;
+        pushLog(state, "move", `${unitLabel(state, p.unit)} 从 ${map.byId[p.from].name} 进入 ${province.name}`);
+        continue;
+      }
+
+      // 2.2 有敌方驻军 -> 战斗
+      const defender = hostile.slice().sort((a, b) => b.strength - a.strength || (a.id < b.id ? -1 : 1))[0];
+      const r = resolveBattle(state, province, p.unit, defender);
+      p.unit.strength = Math.round(r.attackerRemaining);
+      defender.strength = Math.round(r.defenderRemaining);
+
+      pushLog(state, "battle",
+        `${unitLabel(state, p.unit)} 进攻 ${province.name}：攻方战力 ${Math.round(r.attackerPower)} vs 守方 ${Math.round(r.defenderPower)}，双方损失 ${Math.round(r.attackerLoss)} / ${Math.round(r.defenderLoss)}，战后兵力 ${p.unit.strength} : ${defender.strength}`);
+
+      if (defender.strength <= 0) removeUnit(state, defender);
+      if (p.unit.strength <= 0) removeUnit(state, p.unit);
+
+      if (r.attackerWins && p.unit.strength > 0) {
+        for (const h of hostile) {
+          const cur = state.units[h.id];
+          if (!cur) continue;
+          if (cur.strength <= 0) { removeUnit(state, cur); continue; }
+          const fromName = map.byId[cur.province]?.name ?? cur.province;
+          const dest = findRetreat(state, map, cur);
+          if (dest) {
+            cur.province = dest;
+            cur.morale = clampMorale(cur.morale - MORALE_LOSS);
+            pushLog(state, "battle", `${unitLabel(state, cur)} 战败，从 ${fromName} 撤退至 ${map.byId[dest].name}`);
+          } else {
+            pushLog(state, "battle", `${unitLabel(state, cur)} 无路可退，全军覆没`);
+            removeUnit(state, cur);
+          }
+        }
+        p.unit.morale = clampMorale(p.unit.morale + MORALE_WIN);
+        p.unit.province = to;
+        pushLog(state, "occupy", `${unitLabel(state, p.unit)} 攻占 ${province.name}`);
       } else {
-        pushLog(state, "block", `${unitLabel(state, p.unit)} 抵达 ${map.byId[to].name} 时已被他国军队占据`);
+        if (p.unit.strength > 0) {
+          p.unit.morale = clampMorale(p.unit.morale - MORALE_LOSS);
+          pushLog(state, "block", `${unitLabel(state, p.unit)} 进攻 ${province.name} 失利，退回 ${map.byId[p.from].name}`);
+        } else {
+          pushLog(state, "battle", `${unitLabel(state, p.unit)} 全军覆没`);
+        }
       }
     }
-    void ownerOfProvince;
   }
-}
-
-export function unitLabel(state: GameState, u: Unit): string {
-  const nation = state.nations[u.owner]?.name ?? u.owner;
-  return `${nation}军团(${u.id})`;
 }

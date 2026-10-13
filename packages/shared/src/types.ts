@@ -172,12 +172,18 @@ export interface MapData {
 /** 事件日志 */
 export interface LogEntry {
   turn: number;
-  kind: "move" | "block" | "occupy" | "annex" | "economy" | "system";
+  kind: "move" | "block" | "occupy" | "annex" | "economy" | "battle" | "merge" | "system";
   text: string;
 }
 
 /** 玩家指令（每回合提交，一次性结算） */
-export type Order = { type: "move"; unitId: UnitId; to: ProvinceId };
+export type Order = {
+  type: "move";
+  unitId: UnitId;
+  to: ProvinceId;
+  /** 派遣兵力（50 的整数倍）。省略或等于当前兵力时表示整建制移动 */
+  strength?: number;
+};
 
 export type GamePhase = "orders" | "resolve" | "gameover";
 

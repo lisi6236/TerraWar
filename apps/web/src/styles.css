@@ -100,3 +100,23 @@ button.mini { margin-left: 8px; background: transparent; border: 1px solid var(-
 .unit.mine .unit-ring { stroke: #fff; stroke-width: 2; }
 .unit.selected .unit-ring { stroke: var(--accent); stroke-width: 2.6; }
 .unit .unit-label { fill: #10141a; font-size: 7px; font-weight: 700; text-anchor: middle; pointer-events: none; }
+/* ---------- 命令箭头 / 领土轮廓 / 结算弹窗 ---------- */
+.player-outline { stroke: #ffffff; stroke-width: 1.6; stroke-opacity: .85; pointer-events: none; }
+.order-arrow line { stroke: #d9a441; stroke-width: 2.4; stroke-dasharray: 6 5; }
+.order-arrow text { fill: #f0e6d2; font-size: 11px; font-weight: 700; text-anchor: middle; paint-order: stroke; stroke: #10141a; stroke-width: 3px; }
+.order-arrow.attack line { stroke: #e0603f; stroke-width: 3; }
+.you { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.you b { color: var(--text); font-size: 15px; }
+.modal-mask { position: fixed; inset: 0; background: rgba(6,9,13,.72); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.modal { width: 420px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 24px 26px; }
+.modal h2 { margin: 0 0 14px; font-size: 17px; color: var(--accent); }
+.intro-nation { display: flex; align-items: center; gap: 12px; font-size: 26px; font-weight: 700; margin-bottom: 14px; }
+.swatch.big { width: 26px; height: 26px; border-radius: 6px; }
+.split-amount { font-size: 30px; font-weight: 700; color: var(--accent); text-align: center; margin: 10px 0; }
+.modal input[type="range"] { width: 100%; }
+.modal .chips { flex-wrap: wrap; margin-top: 10px; }
+.modal .chip { flex: 0 0 auto; padding: 6px 12px; flex-direction: row; }
+.modal-actions { display: flex; gap: 10px; margin-top: 18px; }
+.modal-actions .ghost, .modal-actions .primary { flex: 1; }
+.log .k-battle { color: #e0603f; }
+.log .k-merge { color: #9cc3d5; }

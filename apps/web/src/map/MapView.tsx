@@ -1,31 +1,31 @@
 import { useMemo, useState } from "react";
 import { geoCentroid, geoMercator, geoPath } from "d3-geo";
 import { feature, mesh } from "topojson-client";
-import type { GameState, MapData } from "@terrawar/shared";
+import type { GameState, MapData, Order } from "@terrawar/shared";
 import { NEUTRAL_FALLBACK, TERRAIN_TONE } from "../game/colors";
 
 interface Props {
   topo: any;
   mapData: MapData;
   state: GameState;
+  orders: Order[];
   width: number;
   height: number;
   selectedUnitId: string | null;
   selectedProvinceId: string | null;
   reachable: string[];
-  onProvinceClick: (id: string) => void;
+  onProvinceClick: (id: string, ctrlKey: boolean) => void;
   onUnitClick: (id: string) => void;
 }
 
 export function MapView({
-  topo, mapData, state, width, height,
+  topo, mapData, state, orders, width, height,
   selectedUnitId, selectedProvinceId, reachable, onProvinceClick, onUnitClick,
 }: Props) {
   const [hover, setHover] = useState<{ text: string; sub: string; x: number; y: number } | null>(null);
 
-  const { features, borders, path, projection, centroidById } = useMemo(() => {
+  const geo = useMemo(() => {
     const fc = feature(topo, topo.objects.provinces) as any;
-    const borders = mesh(topo, topo.objects.provinces, (a: any, b: any) => a !== b);
     const projection = geoMercator().fitExtent(
       [[26, 26], [Math.max(50, width - 26), Math.max(50, height - 26)]],
       fc,
@@ -35,7 +35,7 @@ export function MapView({
       const c = projection(geoCentroid(f));
       if (c) centroidById.set(f.properties.id, [c[0], c[1]]);
     }
-    return { features: fc.features as any[], borders, path: geoPath(projection), projection, centroidById };
+    return { features: fc.features as any[], path: geoPath(projection), centroidById };
   }, [topo, width, height]);
 
   const staticById = useMemo(() => {
@@ -43,6 +43,17 @@ export function MapView({
     for (const p of mapData.provinces) m.set(p.id, p);
     return m;
   }, [mapData]);
+
+  const ownerOf = (id: string) => state.provinces[id]?.owner ?? null;
+
+  // 省界（只在省份之间）
+  const borders = useMemo(() => mesh(topo, topo.objects.provinces, (a: any, b: any) => a !== b), [topo]);
+
+  // 玩家领土轮廓（含海岸线）：玩家地块与非玩家地块之间的弧
+  const playerOutline = useMemo(() => {
+    const isMine = (g: any) => !!g && ownerOf(g.properties.id) === state.playerNation;
+    return mesh(topo, topo.objects.provinces, (a: any, b: any) => isMine(a) !== isMine(b));
+  }, [topo, state.provinces, state.playerNation]);
 
   const unitsByProvince = useMemo(() => {
     const m = new Map<string, { id: string; owner: string; strength: number }[]>();
@@ -59,16 +70,23 @@ export function MapView({
   return (
     <div className="map-wrap">
       <svg width={width} height={height} className="map-svg">
+        <defs>
+          <marker id="arrow-move" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+            <path d="M0,0 L7,3 L0,6 z" fill="#d9a441" />
+          </marker>
+          <marker id="arrow-attack" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+            <path d="M0,0 L7,3 L0,6 z" fill="#e0603f" />
+          </marker>
+        </defs>
         <rect width={width} height={height} className="sea" />
 
-        {features.map((f) => {
+        {geo.features.map((f) => {
           const id: string = f.properties.id;
           const stat = staticById.get(id);
-          const rt = state.provinces[id];
-          const owner = rt?.owner ?? null;
+          const owner = ownerOf(id);
           const fill = owner
             ? state.nations[owner]?.color ?? NEUTRAL_FALLBACK
-            : TERRAIN_TONE[stat?.terrain ?? "plain"] ?? NEUTRAL_FALLBACK;
+            : TERRAIN_TONE[(stat?.terrain ?? "plain") as keyof typeof TERRAIN_TONE] ?? NEUTRAL_FALLBACK;
           const cls = [
             "province",
             owner ? "" : "neutral",
@@ -78,10 +96,10 @@ export function MapView({
           return (
             <path
               key={id}
-              d={path(f) || undefined}
+              d={geo.path(f) || undefined}
               className={cls}
               fill={fill}
-              onClick={() => onProvinceClick(id)}
+              onClick={(e) => onProvinceClick(id, e.ctrlKey || e.metaKey)}
               onMouseMove={(e) =>
                 setHover({
                   text: stat?.name ?? id,
@@ -94,12 +112,13 @@ export function MapView({
           );
         })}
 
-        {borders && <path d={path(borders) || undefined} className="borders" fill="none" />}
+        <path d={geo.path(borders) || undefined} className="borders" fill="none" />
+        <path d={geo.path(playerOutline) || undefined} className="player-outline" fill="none" />
 
-        {features
+        {geo.features
           .filter((f) => staticById.get(f.properties.id)?.isCapital)
           .map((f) => {
-            const c = centroidById.get(f.properties.id);
+            const c = geo.centroidById.get(f.properties.id);
             if (!c) return null;
             return (
               <g key={"cap-" + f.properties.id} className="capital">
@@ -110,24 +129,49 @@ export function MapView({
           })}
 
         {[...unitsByProvince.entries()].map(([provinceId, list]) => {
-          const c = centroidById.get(provinceId);
+          const c = geo.centroidById.get(provinceId);
           if (!c) return null;
           return list.map((u, i) => {
-            const dx = (i - (list.length - 1) / 2) * 13;
-            const isPlayer = state.nations[u.owner]?.isPlayer;
+            const dx = (i - (list.length - 1) / 2) * 15;
+            const isMine = state.nations[u.owner]?.isPlayer;
             return (
               <g
                 key={u.id}
-                className={"unit" + (u.id === selectedUnitId ? " selected" : "") + (isPlayer ? " mine" : "")}
+                className={"unit" + (u.id === selectedUnitId ? " selected" : "") + (isMine ? " mine" : "")}
                 transform={`translate(${c[0] + dx}, ${c[1]})`}
                 onClick={(e) => { e.stopPropagation(); onUnitClick(u.id); }}
               >
-                <circle r={7} fill={state.nations[u.owner]?.color ?? "#888"} />
-                <circle r={7} className="unit-ring" />
+                <circle r={8} fill={state.nations[u.owner]?.color ?? "#888"} />
+                <circle r={8} className="unit-ring" />
                 <text y={3} className="unit-label">{Math.round(u.strength)}</text>
               </g>
             );
           });
+        })}
+
+        {orders.map((o) => {
+          const u = state.units[o.unitId];
+          if (!u) return null;
+          const a = geo.centroidById.get(u.province);
+          const b = geo.centroidById.get(o.to);
+          if (!a || !b) return null;
+          const dx = b[0] - a[0], dy = b[1] - a[1];
+          const len = Math.hypot(dx, dy) || 1;
+          const ux = dx / len, uy = dy / len;
+          const x1 = a[0] + ux * 14, y1 = a[1] + uy * 14;
+          const x2 = b[0] - ux * 14, y2 = b[1] - uy * 14;
+          const isAttack = Object.values(state.units).some((x) => x.province === o.to && x.owner !== u.owner);
+          return (
+            <g key={"ord-" + o.unitId} className={"order-arrow" + (isAttack ? " attack" : "")}>
+              <line
+                x1={x1} y1={y1} x2={x2} y2={y2}
+                markerEnd={isAttack ? "url(#arrow-attack)" : "url(#arrow-move)"}
+              />
+              <text x={(x1 + x2) / 2} y={(y1 + y2) / 2 - 6}>
+                {Math.round(o.strength ?? u.strength)}
+              </text>
+            </g>
+          );
         })}
       </svg>
 
@@ -137,7 +181,6 @@ export function MapView({
           <div>{hover.sub}</div>
         </div>
       )}
-      {void projection}
     </div>
   );
 }

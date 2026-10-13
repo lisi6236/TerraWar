@@ -82,6 +82,15 @@ export const INITIAL_RESOURCES: Resources = { steel: 300, oil: 200, food: 300, f
 /** 单地块驻军容量（满编军团数） */
 export const GARRISON_CAPACITY = 2;
 
+/** 单地块驻军兵力上限（2 个满编合成军团 = 200 战力）；同兵种在驻军上限内自动合并为一支 */
+export const LAND_CAPACITY_STRENGTH = 200;
+
+/** 分兵档位（按住 Ctrl 下达命令时） */
+export const SPLIT_STEP = 50;
+
+/** 士气修正锚点（取自《战斗结算公式》§3.1，中间值线性插值） */
+export const MORALE_ANCHORS: [number, number][] = [[20, 0.5], [40, 0.8], [70, 1.0], [100, 1.1]];
+
 /** 占领后初始抵抗值 = 人口 × 该系数 + 关系惩罚 */
 export const RESISTANCE_INITIAL_FACTOR = 0.5;
 
@@ -100,3 +109,6 @@ export const CAPITAL_FUND_BONUS = 1.5;
 
 /** 对局状态版本号（存档迁移用） */
 export const STATE_VERSION = 1;
+/** 战斗胜负士气变化（《战斗结算公式》§4.2） */
+export const MORALE_WIN = 10;
+export const MORALE_LOSS = 15;

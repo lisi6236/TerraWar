@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { feature } from "topojson-client";
 import type { MapData, Province } from "@terrawar/shared";
-import { createGame, indexMap, reachableProvinces, unitsIn } from "../index";
+import { createGame, endTurn, indexMap, reachableProvinces, unitsIn } from "../index";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const MAPS_DIR = path.resolve(here, "../../../../packages/map-data/maps");
@@ -84,4 +84,50 @@ describe("真实地图数据", () => {
       });
     });
   }
+});
+describe("真实地图上的进攻（战斗结算）", () => {
+  const map = loadMap("europe-5.topojson.json");
+  const me = map.playable[0];
+
+  it("存在跨国的相邻省份（可用于进攻）", () => {
+    let found = false;
+    for (const p of map.provinces) {
+      if (p.ownerAtStart !== me) continue;
+      for (const nb of p.adjacency) {
+        const q = map.provinces.find((x) => x.id === nb);
+        if (q && q.ownerAtStart && q.ownerAtStart !== me) { found = true; break; }
+      }
+      if (found) break;
+    }
+    expect(found).toBe(true);
+  });
+
+  it("优势兵力进攻相邻敌国省份可以夺取该地块", () => {
+    let pair: { from: string; to: string } | null = null;
+    for (const p of map.provinces) {
+      if (p.ownerAtStart !== me) continue;
+      for (const nb of p.adjacency) {
+        const q = map.provinces.find((x) => x.id === nb);
+        if (q && q.ownerAtStart && q.ownerAtStart !== me) { pair = { from: p.id, to: q.id }; break; }
+      }
+      if (pair) break;
+    }
+    expect(pair).toBeTruthy();
+    const enemy = map.provinces.find((x) => x.id === pair!.to)!.ownerAtStart!;
+
+    const state = createGame(map, { seed: 20261013, playerNation: me });
+    const idx = indexMap(map);
+    const attacker = Object.values(state.units).find((u) => u.owner === me)!;
+    const defender = Object.values(state.units).find((u) => u.owner === enemy)!;
+
+    attacker.province = pair!.from;
+    attacker.strength = 200;
+    defender.province = pair!.to;
+    defender.strength = 100;
+
+    const after = endTurn(state, idx, [{ type: "move", unitId: attacker.id, to: pair!.to }]);
+    expect(after.provinces[pair!.to].owner).toBe(me);
+    expect(after.units[attacker.id]?.province).toBe(pair!.to);
+    expect(after.log.some((l) => l.kind === "battle")).toBe(true);
+  });
 });
