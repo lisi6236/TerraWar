@@ -1,11 +1,11 @@
-import { useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { GameState, MapData, Order } from "@terrawar/shared";
+import { SPLIT_STEP } from "@terrawar/shared";
 import {
   computeEconomy, createGame, endTurn, indexMap, reachableProvinces, unitsIn, validateOrders,
 } from "@terrawar/engine";
 import { MapView } from "../map/MapView";
 import { TERRAIN_LABEL } from "../map/types";
-import { SPLIT_STEP } from "@terrawar/shared";
 
 interface Props {
   topo: any;
@@ -35,6 +35,11 @@ const LOG_LABEL: Record<string, string> = {
 
 const LAND_CAP = 200;
 
+/** 向下取整到 50 的整数倍 */
+function floorToStep(v: number): number {
+  return Math.floor(v / SPLIT_STEP) * SPLIT_STEP;
+}
+
 export function GameScreen({ topo, mapData, seed, onExit }: Props) {
   const mapBoxRef = useRef<HTMLDivElement>(null);
   const size = useSize(mapBoxRef);
@@ -44,10 +49,33 @@ export function GameScreen({ topo, mapData, seed, onExit }: Props) {
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
   const [selectedProvinceId, setSelectedProvinceId] = useState<string | null>(null);
   const [showIntro, setShowIntro] = useState(true);
-  const [split, setSplit] = useState<{ unitId: string; to: string; max: number; attack: boolean } | null>(null);
-  const [splitAmount, setSplitAmount] = useState(SPLIT_STEP);
+  const [ctrlHeld, setCtrlHeld] = useState(false);
+  const [sendAmount, setSendAmount] = useState(SPLIT_STEP);
+  const [notice, setNotice] = useState("");
+
+  // 跟踪 Ctrl 键（按住才显示分兵框，松开即隐藏，不阻塞任何操作）
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => { if (e.key === "Control") setCtrlHeld(true); };
+    const up = (e: KeyboardEvent) => { if (e.key === "Control") setCtrlHeld(false); };
+    const blur = () => setCtrlHeld(false);
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    window.addEventListener("blur", blur);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", blur);
+    };
+  }, []);
 
   const player = state.nations[state.playerNation];
+  const selUnit = selectedUnitId ? state.units[selectedUnitId] : null;
+  const maxSend = selUnit ? Math.max(SPLIT_STEP, floorToStep(selUnit.strength)) : SPLIT_STEP;
+
+  useEffect(() => {
+    setSendAmount(selUnit ? Math.max(SPLIT_STEP, floorToStep(selUnit.strength)) : SPLIT_STEP);
+  }, [selectedUnitId, selUnit?.strength]);
+
   const reachable = useMemo(
     () => (selectedUnitId ? reachableProvinces(state, mapIndex, selectedUnitId) : []),
     [state, mapIndex, selectedUnitId],
@@ -69,57 +97,49 @@ export function GameScreen({ topo, mapData, seed, onExit }: Props) {
   function handleUnitClick(id: string) {
     const u = state.units[id];
     if (!u || u.owner !== state.playerNation) return;
+    setNotice("");
     setOrders((prev) => prev.filter((o) => o.unitId !== id));
     setSelectedUnitId((prev) => (prev === id ? null : id));
     setSelectedProvinceId(u.province);
   }
 
-  function openSplit(unitId: string, to: string, attack: boolean) {
-    const u = state.units[unitId];
-    if (!u) return;
-    const room = attack ? u.strength : Math.max(0, LAND_CAP - strengthAt(to, u.owner));
-    const max = Math.floor(Math.min(u.strength, room) / SPLIT_STEP) * SPLIT_STEP;
-    if (max < SPLIT_STEP) {
-      window.alert("该地块驻军空间不足（上限 200），无法派兵进入。");
-      return;
-    }
-    setSplit({ unitId, to, max, attack });
-    setSplitAmount(max);
-  }
-
   function handleProvinceClick(id: string, ctrlKey: boolean) {
-    if (selectedUnitId && reachable.includes(id)) {
-      const u = state.units[selectedUnitId];
-      const attack = hasEnemy(id, u.owner);
-      if (ctrlKey) { openSplit(u.id, id, attack); return; }
-      if (!attack && u.strength > LAND_CAP - strengthAt(id, u.owner)) {
-        openSplit(u.id, id, attack);   // 整建制放不下 -> 自动进入分兵
-        return;
-      }
-      addOrder({ type: "move", unitId: u.id, to: id });
+    if (!selectedUnitId || !reachable.includes(id)) {
+      const mine = unitsIn(state, id).filter((u) => u.owner === state.playerNation);
+      if (mine.length) { setSelectedUnitId(mine[0].id); setSelectedProvinceId(id); return; }
       setSelectedUnitId(null);
       setSelectedProvinceId(id);
       return;
     }
-    const mine = unitsIn(state, id).filter((u) => u.owner === state.playerNation);
-    if (mine.length) {
-      setSelectedUnitId(mine[0].id);
-      setSelectedProvinceId(id);
-      return;
+
+    const u = state.units[selectedUnitId];
+    const attack = hasEnemy(id, u.owner);
+    const room = attack ? u.strength : Math.max(0, LAND_CAP - strengthAt(id, u.owner));
+    const split = ctrlKey || ctrlHeld;
+
+    if (split) {
+      const want = Math.min(sendAmount, u.strength, room);
+      const send = floorToStep(want);
+      if (send < SPLIT_STEP) {
+        setNotice("目标地块驻军空间不足（上限 200），无法派兵进入");
+        return;
+      }
+      setNotice(send < sendAmount ? `驻军空间不足，本次派出 ${send}（地块上限 200）` : "");
+      addOrder(send >= u.strength
+        ? { type: "move", unitId: u.id, to: id }
+        : { type: "move", unitId: u.id, to: id, strength: send });
+    } else if (!attack && u.strength > room) {
+      const send = floorToStep(room);
+      if (send < SPLIT_STEP) { setNotice("目标地块驻军已达上限（200），无法进入"); return; }
+      setNotice(`驻军空间不足，已自动派出 ${send}（按住 Ctrl 可自选派遣数量）`);
+      addOrder({ type: "move", unitId: u.id, to: id, strength: send });
+    } else {
+      setNotice("");
+      addOrder({ type: "move", unitId: u.id, to: id });
     }
+
     setSelectedUnitId(null);
     setSelectedProvinceId(id);
-  }
-
-  function confirmSplit() {
-    if (!split) return;
-    const u = state.units[split.unitId];
-    addOrder(splitAmount >= u.strength
-      ? { type: "move", unitId: split.unitId, to: split.to }
-      : { type: "move", unitId: split.unitId, to: split.to, strength: splitAmount });
-    setSplit(null);
-    setSelectedUnitId(null);
-    setSelectedProvinceId(split.to);
   }
 
   function handleEndTurn() {
@@ -128,9 +148,9 @@ export function GameScreen({ topo, mapData, seed, onExit }: Props) {
     setState(endTurn(state, mapIndex, orders));
     setOrders([]);
     setSelectedUnitId(null);
+    setNotice("");
   }
 
-  const selUnit = selectedUnitId ? state.units[selectedUnitId] : null;
   const selProv = selectedProvinceId ? state.provinces[selectedProvinceId] : null;
   const selProvStatic = selectedProvinceId ? mapIndex.byId[selectedProvinceId] : null;
   const recentLogs = state.log.slice(-26).reverse();
@@ -161,6 +181,8 @@ export function GameScreen({ topo, mapData, seed, onExit }: Props) {
             selectedUnitId={selectedUnitId}
             selectedProvinceId={selectedProvinceId}
             reachable={reachable}
+            split={ctrlHeld && selUnit ? { unitId: selUnit.id, amount: sendAmount, max: maxSend } : null}
+            onSplitDelta={(d) => setSendAmount((v) => Math.max(SPLIT_STEP, Math.min(maxSend, v + d)))}
             onProvinceClick={handleProvinceClick}
             onUnitClick={handleUnitClick}
           />
@@ -183,9 +205,9 @@ export function GameScreen({ topo, mapData, seed, onExit }: Props) {
           {selUnit && (
             <div className="hint">
               军团 {selUnit.id}（兵力 <b>{Math.round(selUnit.strength)}</b>，士气 {Math.round(selUnit.morale)}）<br />
-              位于 {mapIndex.byId[selUnit.province]?.name}<br />
-              可移动/进攻 {reachable.length} 个相邻地块<br />
-              <b>按住 Ctrl 点击</b>目标地块可选择派遣兵力（50 一档）
+              位于 {mapIndex.byId[selUnit.province]?.name}，可行动 {reachable.length} 个相邻地块<br />
+              <b>按住 Ctrl</b>：兵团旁出现分兵框（▲▼ 或滚轮调整，50 一档），
+              {ctrlHeld ? <>当前将派出 <b>{sendAmount}</b></> : "再点击目标地块执行"}
             </div>
           )}
           {!selUnit && selProv && selProvStatic && (
@@ -198,7 +220,8 @@ export function GameScreen({ topo, mapData, seed, onExit }: Props) {
               <dt>产出</dt><dd>钢{selProvStatic.base.steel} 油{selProvStatic.base.oil} 粮{selProvStatic.base.food} 资{selProvStatic.base.fund}</dd>
             </dl>
           )}
-          {!selUnit && !selProv && <p className="hint">点击你的军团选择，再点相邻地块下达命令。</p>}
+          {!selUnit && !selProv && <p className="hint">点击你的军团选择，再点相邻地块下达命令。按住 Ctrl 可只派出部分兵力。</p>}
+          {notice && <div className="notice">{notice}</div>}
 
           <h3>待执行指令（{orders.length}）</h3>
           <ul className="orders">
@@ -245,40 +268,10 @@ export function GameScreen({ topo, mapData, seed, onExit }: Props) {
             </div>
             <p className="hint">
               地图上带<b>白色轮廓</b>的区域就是你的领土（{ownedCount} 省）。
-              先点击你的军团（带数字的圆点），再点击虚线高亮的地块下达命令；
-              <b>按住 Ctrl 点击</b>可只派遣部分兵力。
+              点击你的军团（带数字的圆点）选中，再点虚线高亮的地块下达命令；
+              <b>按住 Ctrl</b> 会在军团旁出现分兵框（▲▼ 或滚轮调整，50 一档）。
             </p>
             <button className="primary" onClick={() => setShowIntro(false)}>开始</button>
-          </div>
-        </div>
-      )}
-
-      {split && (
-        <div className="modal-mask">
-          <div className="modal">
-            <h2>派遣兵力</h2>
-            <p className="hint">
-              目标：<b>{mapIndex.byId[split.to]?.name}</b>
-              {split.attack ? "（有敌军驻守，将发生战斗）" : "（我方地块，注意驻军上限 200）"}
-            </p>
-            <div className="split-amount">{splitAmount}</div>
-            <input
-              type="range"
-              min={SPLIT_STEP}
-              max={split.max}
-              step={SPLIT_STEP}
-              value={splitAmount}
-              onChange={(e) => setSplitAmount(Number(e.target.value))}
-            />
-            <div className="chips">
-              {Array.from({ length: Math.floor(split.max / SPLIT_STEP) }, (_, i) => (i + 1) * SPLIT_STEP).map((v) => (
-                <button key={v} className={v === splitAmount ? "chip active" : "chip"} onClick={() => setSplitAmount(v)}>{v}</button>
-              ))}
-            </div>
-            <div className="modal-actions">
-              <button className="ghost" onClick={() => setSplit(null)}>取消</button>
-              <button className="primary" style={{ marginTop: 0 }} onClick={confirmSplit}>确定派遣</button>
-            </div>
           </div>
         </div>
       )}

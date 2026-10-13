@@ -4,6 +4,12 @@ import { feature, mesh } from "topojson-client";
 import type { GameState, MapData, Order } from "@terrawar/shared";
 import { NEUTRAL_FALLBACK, TERRAIN_TONE } from "../game/colors";
 
+export interface SplitControl {
+  unitId: string;
+  amount: number;
+  max: number;
+}
+
 interface Props {
   topo: any;
   mapData: MapData;
@@ -14,13 +20,16 @@ interface Props {
   selectedUnitId: string | null;
   selectedProvinceId: string | null;
   reachable: string[];
+  split: SplitControl | null;
+  onSplitDelta: (delta: number) => void;
   onProvinceClick: (id: string, ctrlKey: boolean) => void;
   onUnitClick: (id: string) => void;
 }
 
 export function MapView({
   topo, mapData, state, orders, width, height,
-  selectedUnitId, selectedProvinceId, reachable, onProvinceClick, onUnitClick,
+  selectedUnitId, selectedProvinceId, reachable, split, onSplitDelta,
+  onProvinceClick, onUnitClick,
 }: Props) {
   const [hover, setHover] = useState<{ text: string; sub: string; x: number; y: number } | null>(null);
 
@@ -45,11 +54,7 @@ export function MapView({
   }, [mapData]);
 
   const ownerOf = (id: string) => state.provinces[id]?.owner ?? null;
-
-  // 省界（只在省份之间）
   const borders = useMemo(() => mesh(topo, topo.objects.provinces, (a: any, b: any) => a !== b), [topo]);
-
-  // 玩家领土轮廓（含海岸线）：玩家地块与非玩家地块之间的弧
   const playerOutline = useMemo(() => {
     const isMine = (g: any) => !!g && ownerOf(g.properties.id) === state.playerNation;
     return mesh(topo, topo.objects.provinces, (a: any, b: any) => isMine(a) !== isMine(b));
@@ -66,6 +71,8 @@ export function MapView({
   }, [state.units]);
 
   const reachSet = new Set(reachable);
+  const splitUnit = split ? state.units[split.unitId] : null;
+  const splitAnchor = splitUnit ? geo.centroidById.get(splitUnit.province) : null;
 
   return (
     <div className="map-wrap">
@@ -163,16 +170,32 @@ export function MapView({
           const isAttack = Object.values(state.units).some((x) => x.province === o.to && x.owner !== u.owner);
           return (
             <g key={"ord-" + o.unitId} className={"order-arrow" + (isAttack ? " attack" : "")}>
-              <line
-                x1={x1} y1={y1} x2={x2} y2={y2}
-                markerEnd={isAttack ? "url(#arrow-attack)" : "url(#arrow-move)"}
-              />
-              <text x={(x1 + x2) / 2} y={(y1 + y2) / 2 - 6}>
-                {Math.round(o.strength ?? u.strength)}
-              </text>
+              <line x1={x1} y1={y1} x2={x2} y2={y2}
+                markerEnd={isAttack ? "url(#arrow-attack)" : "url(#arrow-move)"} />
+              <text x={(x1 + x2) / 2} y={(y1 + y2) / 2 - 6}>{Math.round(o.strength ?? u.strength)}</text>
             </g>
           );
         })}
+
+        {split && splitAnchor && (
+          <g
+            className="split-ctl"
+            transform={`translate(${splitAnchor[0] + 16}, ${splitAnchor[1] - 11})`}
+            onClick={(e) => e.stopPropagation()}
+            onWheel={(e) => { e.stopPropagation(); onSplitDelta(e.deltaY < 0 ? 50 : -50); }}
+          >
+            <rect className="split-bg" width={104} height={22} rx={4} />
+            <text className="split-text" x={8} y={15}>{split.amount}/{split.max}</text>
+            <g className="split-btn" onClick={() => onSplitDelta(50)}>
+              <rect x={80} y={2} width={20} height={9} rx={2} />
+              <path d="M84,8 L90,3 L96,8 z" />
+            </g>
+            <g className="split-btn" onClick={() => onSplitDelta(-50)}>
+              <rect x={80} y={11} width={20} height={9} rx={2} />
+              <path d="M84,14 L90,19 L96,14 z" />
+            </g>
+          </g>
+        )}
       </svg>
 
       {hover && (

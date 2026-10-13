@@ -120,3 +120,13 @@ button.mini { margin-left: 8px; background: transparent; border: 1px solid var(-
 .modal-actions .ghost, .modal-actions .primary { flex: 1; }
 .log .k-battle { color: #e0603f; }
 .log .k-merge { color: #9cc3d5; }
+/* ---------- 内联分兵框（不阻塞操作） ---------- */
+.split-ctl { cursor: default; }
+.split-ctl .split-bg { fill: rgba(12,16,22,.94); stroke: var(--accent); stroke-width: 1; }
+.split-ctl .split-text { fill: #f0e6d2; font-size: 12px; font-weight: 700; dominant-baseline: middle; }
+.split-ctl .split-btn { cursor: pointer; }
+.split-ctl .split-btn rect { fill: #232c37; stroke: #3a4657; stroke-width: .8; }
+.split-ctl .split-btn:hover rect { fill: var(--accent); }
+.split-ctl .split-btn path { fill: #cfd8e3; }
+.split-ctl .split-btn:hover path { fill: #1a1a1a; }
+.notice { margin-top: 8px; padding: 6px 9px; border-radius: 6px; background: #33301f; border: 1px solid #6b5a24; color: #e0cf99; font-size: 12px; }
