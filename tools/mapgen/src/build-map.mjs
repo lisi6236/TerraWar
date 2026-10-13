@@ -196,7 +196,7 @@ function finalize(provinces, adjacency, map) {
       color: p.properties.ownerAtStart
         ? (NATION_META[p.properties.ownerAtStart]?.color || "#c9c3b4")
         : (TERRAIN_TONE[p.properties.terrain] || "#cdc7b6"),
-      adjacency: adjacency[i],
+      adjacency: adjacency[i].map((j) => provinces[j].id),  // 下标 -> 省份 id
       defenseBonus: DEFENSE[p.properties.terrain] ?? 1.0,
       base: {
         steel: p.properties.isCore ? 6 : 2,

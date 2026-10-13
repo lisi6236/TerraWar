@@ -146,3 +146,53 @@ export interface SaveGame {
   createdAt: string;
   updatedAt: string;
 }
+// ============================================================================
+// 地图静态数据（由 mapgen 产出，交给引擎使用）
+// ============================================================================
+
+export interface NationMeta {
+  name: string;
+  color: string;
+}
+
+export interface MapData {
+  id: string;
+  name: string;
+  difficulty: number;
+  /** 可玩国家（开局占据省份的国家）；玩家从中随机分配一个 */
+  playable: NationId[];
+  nations: Record<NationId, NationMeta>;
+  provinces: Province[];
+}
+
+// ============================================================================
+// 对局状态（可序列化，用于存档 / 回放）
+// ============================================================================
+
+/** 事件日志 */
+export interface LogEntry {
+  turn: number;
+  kind: "move" | "block" | "occupy" | "annex" | "economy" | "system";
+  text: string;
+}
+
+/** 玩家指令（每回合提交，一次性结算） */
+export type Order = { type: "move"; unitId: UnitId; to: ProvinceId };
+
+export type GamePhase = "orders" | "resolve" | "gameover";
+
+export interface GameState {
+  version: number;
+  seed: number;
+  turn: number;
+  phase: GamePhase;
+  mapId: string;
+  difficulty: number;
+  /** 玩家所控制的国家（随机分配） */
+  playerNation: NationId;
+  nations: Record<NationId, Nation>;
+  provinces: Record<ProvinceId, ProvinceRuntime>;
+  units: Record<UnitId, Unit>;
+  nextUnitSeq: number;
+  log: LogEntry[];
+}

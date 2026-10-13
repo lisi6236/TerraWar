@@ -71,3 +71,32 @@ export const PROVINCE_BASE_YIELD = { steel: 2, oil: 1, food: 3, fund: 5 } as con
 
 /** 外交信誉初始值 */
 export const REPUTATION_INITIAL = 50;
+// ----------------------------------------------------------------------------
+// 对局初始值与占领 / 经济规则（对应 docs 附录 A）
+// ----------------------------------------------------------------------------
+import type { Resources } from "./types";
+
+/** 各国开局资源 */
+export const INITIAL_RESOURCES: Resources = { steel: 300, oil: 200, food: 300, fund: 500 };
+
+/** 单地块驻军容量（满编军团数） */
+export const GARRISON_CAPACITY = 2;
+
+/** 占领后初始抵抗值 = 人口 × 该系数 + 关系惩罚 */
+export const RESISTANCE_INITIAL_FACTOR = 0.5;
+
+/** 每回合抵抗衰减 = 驻军总战力 × 该系数 */
+export const RESISTANCE_DECAY_FACTOR = 0.2;
+
+/** 抵抗值低于该值视为「正式吞并」 */
+export const RESISTANCE_ANNEX_THRESHOLD = 10;
+
+/** 关系值 ≤ 该阈值时，占领额外 +RELATION_HOSTILE_PENALTY 抵抗值 */
+export const RELATION_HOSTILE_THRESHOLD = -60;
+export const RELATION_HOSTILE_PENALTY = 30;
+
+/** 首都资金产出加成 */
+export const CAPITAL_FUND_BONUS = 1.5;
+
+/** 对局状态版本号（存档迁移用） */
+export const STATE_VERSION = 1;
