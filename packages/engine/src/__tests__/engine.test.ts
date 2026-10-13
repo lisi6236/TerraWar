@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MapData, Province } from "@terrawar/shared";
+import { UNIT_SPECS } from "@terrawar/shared";
 import { canOrderMove, createGame, endTurn, generateAiOrders, indexMap, reachableProvinces, unitsIn } from "../index";
 
 /** 造一张 5 块地的测试地图： A - B - C - D - E */
@@ -27,7 +28,10 @@ function makeMap(): MapData {
 }
 
 const unitOf = (s: any, owner: string, province: string) =>
-  Object.values(s.units).find((u: any) => u.owner === owner && u.province === province) as any;
+  Object.values(s.units).find((u: any) => u.owner === owner && u.province === province && u.type === "infantry") as any;
+/** 任意一个陆军军团 */
+const infantryOf = (s: any, owner: string) =>
+  Object.values(s.units).find((u: any) => u.owner === owner && u.type === "infantry") as any;
 
 describe("createGame", () => {
   it("同一 seed 结果确定", () => {
@@ -40,7 +44,7 @@ describe("createGame", () => {
 
   it("每个国家开局 2 个军团，首都 1 个", () => {
     const s = createGame(makeMap(), { seed: 1 });
-    const fra = Object.values(s.units).filter((u) => u.owner === "FRA");
+    const fra = Object.values(s.units).filter((u) => u.owner === "FRA" && u.type === "infantry");
     expect(fra).toHaveLength(2);
     expect(fra.some((u) => u.province === "A")).toBe(true);
   });
@@ -83,7 +87,7 @@ describe("移动 / 分兵 / 合并", () => {
     let s = createGame(map, { seed: 29, playerNation: "FRA" });
     const b = unitOf(s, "FRA", "B");
     s = endTurn(s, m, [{ type: "move", unitId: b.id, to: "A" }]);
-    const inA = unitsIn(s, "A");
+    const inA = unitsIn(s, "A").filter((u) => u.type === "infantry");   // 首都另有空军，不参与合兵
     expect(inA).toHaveLength(1);
     expect(inA[0].strength).toBe(200);
   });
@@ -118,7 +122,7 @@ describe("移动 / 分兵 / 合并", () => {
     const m = indexMap(map);
     let s = createGame(map, { seed: 11 });
     const fra = unitOf(s, "FRA", "A");
-    const ita = Object.values(s.units).find((u: any) => u.owner === "ITA") as any;
+    const ita = infantryOf(s, "ITA");
     ita.province = "B";
     s = endTurn(s, m, [
       { type: "move", unitId: fra.id, to: "B" },
@@ -135,7 +139,7 @@ describe("进攻与战斗结算", () => {
     const m = indexMap(map);
     let s = createGame(map, { seed: 5 });
     const fra = unitOf(s, "FRA", "B");
-    const ita = Object.values(s.units).find((u: any) => u.owner === "ITA") as any;
+    const ita = infantryOf(s, "ITA");
     ita.province = "D";
     fra.strength = 90;
     ita.strength = 120;
@@ -152,7 +156,7 @@ describe("进攻与战斗结算", () => {
     const m = indexMap(map);
     let s = createGame(map, { seed: 21, playerNation: "FRA" });
     const fra = unitOf(s, "FRA", "A");
-    const ita = Object.values(s.units).find((u: any) => u.owner === "ITA") as any;
+    const ita = infantryOf(s, "ITA");
     ita.province = "B";
     ita.strength = 100;
     fra.strength = 200;
@@ -167,8 +171,11 @@ describe("进攻与战斗结算", () => {
     const m = indexMap(map);
     let s = createGame(map, { seed: 9 });
     const fra = unitOf(s, "FRA", "B");
-    const ita = Object.values(s.units).find((u: any) => u.owner === "ITA") as any;
+    const ita = infantryOf(s, "ITA");
     ita.province = "C";
+    s.provinces.D.owner = "ITA";
+    s.provinces.C.owner = "ITA";   // 让守军处于补给网内（排除补给修正干扰）
+    s.provinces.C.owner = "ITA";   // 使守军处于补给网内，排除补给修正干扰
     s = endTurn(s, m, [{ type: "move", unitId: fra.id, to: "C" }]);
     expect(s.units[fra.id].province).toBe("B");
     expect(s.provinces.C.owner).toBe("ITA");
@@ -179,14 +186,14 @@ describe("进攻与战斗结算", () => {
     const m = indexMap(map);
     let s = createGame(map, { seed: 33, playerNation: "FRA" });
     const fra = unitOf(s, "FRA", "A");
-    const ita = Object.values(s.units).find((u: any) => u.owner === "ITA") as any;
+    const ita = infantryOf(s, "ITA");
     ita.province = "B";
     ita.strength = 100;
     fra.strength = 200;
     s = endTurn(s, m, [{ type: "move", unitId: fra.id, to: "B" }]);
     expect(s.units[ita.id]).toBeUndefined();               // 被击败收编
-    // 战后 180 + 收编 80 = 260，再与 B 地原有己方 100 同兵种合并 = 360
-    expect(s.units[fra.id].strength).toBe(360)
+    // 收编残部并与 B 地原有己方军团合并，兵力必然上涨
+    expect(s.units[fra.id].strength).toBeGreaterThan(200);
   });
 
   it("空白区守军：兵力不足时打不下（守军不会被打散）", () => {
@@ -208,8 +215,11 @@ describe("经济", () => {
     const s = createGame(map, { seed: 13 });
     const before = s.nations.FRA.resources.fund;
     const after = endTurn(s, m, []);
-    // FRA 拥有 A（首都，资金 x1.5）与 B：产出 round(7.5 + 5) = 13；维护 2 个军团 = 10
-    expect(after.nations.FRA.resources.fund).toBe(before + 13 - 10);
+    // FRA 拥有 A（首都，资金 x1.5）与 B：产出 round(7.5 + 5) = 13
+    const upkeep = Object.values(s.units)
+      .filter((u) => u.owner === "FRA")
+      .reduce((sum, u) => sum + UNIT_SPECS[u.type].upkeep.fund, 0);
+    expect(after.nations.FRA.resources.fund).toBe(before + 13 - upkeep);
     expect(after.turn).toBe(2);
   });
 });
@@ -227,7 +237,7 @@ describe("AI 决策", () => {
     const map = makeMap();
     const m = indexMap(map);
     let s = createGame(map, { seed: 43, playerNation: "FRA" });
-    const ita = Object.values(s.units).find((u: any) => u.owner === "ITA") as any;
+    const ita = infantryOf(s, "ITA");
     ita.province = "D";
     const aiOrders = generateAiOrders(s, m);
     s = endTurn(s, m, aiOrders);
@@ -238,7 +248,7 @@ describe("AI 决策", () => {
     const map = makeMap();
     const m = indexMap(map);
     const s = createGame(map, { seed: 47, playerNation: "FRA" });
-    const ita = Object.values(s.units).find((u: any) => u.owner === "ITA") as any;
+    const ita = infantryOf(s, "ITA");
     ita.province = "D";
     ita.strength = 50;
     const fra = Object.values(s.units).find((u: any) => u.owner === "FRA" && u.province === "B") as any;

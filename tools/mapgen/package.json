@@ -9,6 +9,7 @@
   "dependencies": {
     "@geo-insight/data": "^0.3.0",
     "topojson-client": "^3.1.0",
+    "polygon-clipping": "^0.15.7",
     "topojson-server": "^3.0.1"
   }
 }

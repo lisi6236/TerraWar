@@ -38,6 +38,7 @@ export const AIR_RANGE: Record<string, number> = { tactical_air: 3, strategic_ai
 /** 地形防御修正（仅守方，见《战斗结算公式》§3.1） */
 export const TERRAIN_DEFENSE: Record<Terrain, number> = {
   plain: 1.0, hills: 1.15, mountain: 1.3, forest: 1.2, desert: 0.9, urban: 1.25, coast: 1.0, island: 1.1,
+  near_sea: 1.0, deep_sea: 1.0, strait: 1.25, canal: 1.2,
 };
 
 /** 要塞防御修正（仅守方） */
@@ -114,3 +115,23 @@ export const MORALE_WIN = 10;
 export const MORALE_LOSS = 15;
 /** 空白未占领区的默认守军兵力（占领需先击败它；战胜后其残部并入攻方） */
 export const NEUTRAL_GARRISON_STRENGTH = 50;
+// ----------------------------------------------------------------------------
+// 海战 / 空军（M4）
+// ----------------------------------------------------------------------------
+/** 海战修正：海峡守方 ×1.25；远洋攻方 ×1.1；远离本土港口 ×0.8 */
+export const SEA_MODIFIERS = { straitDefender: 1.25, openSeaAttacker: 1.1, farFromPort: 0.8 };
+
+/** 制空权修正（海战）：己方 ×1.15 / 敌方 ×0.85 */
+export const AIR_SUPREMACY_SEA = { own: 1.15, enemy: 0.85 } as const;
+
+/** 争夺制空权的战力比阈值：领先方需超过对方该倍数才算掌握制空权，否则均势 */
+export const AIR_SUPREMACY_RATIO = 1.2;
+
+/** 空军驻地：简化处理，不强制机场（机场建筑在 M6 加入） */
+export const AIR_RANGE_BY_TYPE: Record<string, number> = { tactical_air: 3, strategic_air: 5 };
+
+/** 两栖登陆：登陆方首轮 ×0.7；海军舰炮支援 +15%；空军支援 +10%；守方海岸要塞 +30% */
+export const AMPHIBIOUS = { landingPenalty: 0.7, navalGunfire: 1.15, airSupport: 1.1, coastalFort: 1.3 };
+
+/** 运输舰队搭载容量 */
+export const TRANSPORT_CAPACITY = 1;

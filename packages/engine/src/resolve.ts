@@ -1,26 +1,46 @@
-// 回合结算总入口（顺序见 docs/开发计划与实现方案.md 附录 A.1）
-import type { GameState, Order } from "@terrawar/shared";
-import { resolveMovements } from "./movement";
+// 回合结算总入口（顺序见 docs/开发计划与实现方案.md 附录 A.1 / C）
+import type { GameState, Order, ProvinceId } from "@terrawar/shared";
+import { UNIT_SPECS } from "@terrawar/shared";
+import { activeUnitsIn, resolveMovements } from "./movement";
 import { mergeStacks } from "./stack";
 import { decayResistance, resolveOccupation } from "./occupation";
 import { resolveEconomy } from "./economy";
+import { resolveSupply } from "./supply";
+import { computeAirSuperiority } from "./air";
 import type { MapIndex } from "./state";
 
 const LOG_LIMIT = 400;
+
+/** 制海权：某海区只有一国的水面/潜艇部队时，该国控制该海区 */
+function updateSeaControl(state: GameState, map: MapIndex): void {
+  for (const id of map.ids) {
+    const prov = map.byId[id];
+    if (prov.kind !== "sea") continue;
+    const owners = new Set(
+      activeUnitsIn(state, id)
+        .filter((u) => !UNIT_SPECS[u.type]?.requiresAirbase)
+        .map((u) => u.owner),
+    );
+    if (owners.size === 1) state.provinces[id].owner = [...owners][0];
+  }
+}
 
 export function endTurn(state: GameState, map: MapIndex, orders: Order[]): GameState {
   const s: GameState = structuredClone(state);
   s.phase = "resolve";
 
-  resolveMovements(s, map, orders);   // 2. 移动 / 分兵 / 进攻与冲突裁决
-  mergeStacks(s, map);                // 2.5 同兵种合并
-  resolveOccupation(s, map);          // 3. 占领与抵抗
-  decayResistance(s, map);            // 4. 抵抗衰减
-  resolveEconomy(s, map);             // 5. 资源产出与维护
+  resolveSupply(s, map);                       // 1. 补给线判定（影响后续战力）
+  const air = computeAirSuperiority(s, map);   // 2. 制空权投射
+  resolveMovements(s, map, orders, { air });   // 3. 移动 / 分兵 / 进攻 / 海战 / 登陆 / 转场
+  mergeStacks(s, map);                         // 4. 同兵种合并
+  updateSeaControl(s, map);                    // 5. 制海权
+  resolveOccupation(s, map);                   // 6. 占领与抵抗
+  decayResistance(s, map);                     // 7. 抵抗衰减
+  resolveEconomy(s, map);                      // 8. 资源产出与维护
 
   for (const u of Object.values(s.units)) u.movedThisTurn = 0;
   s.turn += 1;
-  s.phase = "orders";                 // 6. 进入下一回合
+  s.phase = "orders";
 
   if (s.log.length > LOG_LIMIT) s.log = s.log.slice(s.log.length - LOG_LIMIT);
   return s;
@@ -41,3 +61,5 @@ export function validateOrders(state: GameState, map: MapIndex, orders: Order[])
   }
   return errors;
 }
+
+export type { ProvinceId };

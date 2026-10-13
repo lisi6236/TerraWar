@@ -46,9 +46,11 @@ describe("真实地图数据", () => {
     describe(file, () => {
       const map = loadMap(file);
 
-      it("省份数量符合难度设定（30 / 50 / 70）", () => {
+      it("陆地省份数量符合难度设定（30 / 50 / 70）", () => {
         const expected: Record<number, number> = { 3: 30, 5: 50, 7: 70 };
-        expect(map.provinces.length).toBe(expected[map.difficulty]);
+        const land = map.provinces.filter((p) => p.kind === "land");
+        expect(land.length).toBe(expected[map.difficulty]);
+        expect(map.provinces.some((p) => p.kind === "sea")).toBe(true);
       });
 
       it("邻接表全部指向真实省份 id", () => {
@@ -67,12 +69,12 @@ describe("真实地图数据", () => {
 
       it("每个可玩国家开局 6 省、2 个军团，且首都军团至少能移动 1 格", () => {
         for (const nation of map.playable) {
-          const owned = map.provinces.filter((p) => p.ownerAtStart === nation);
+          const owned = map.provinces.filter((p) => p.ownerAtStart === nation && p.kind === "land");
           expect(owned.length).toBe(6);
 
           const state = createGame(map, { seed: 20261013, playerNation: nation });
           const idx = indexMap(map);
-          const mine = Object.values(state.units).filter((u) => u.owner === nation);
+          const mine = Object.values(state.units).filter((u) => u.owner === nation && u.type === "infantry");
           expect(mine.length).toBe(2);
 
           const capital = owned.find((p) => p.isCapital)!;
@@ -117,8 +119,8 @@ describe("真实地图上的进攻（战斗结算）", () => {
 
     const state = createGame(map, { seed: 20261013, playerNation: me });
     const idx = indexMap(map);
-    const attacker = Object.values(state.units).find((u) => u.owner === me)!;
-    const defender = Object.values(state.units).find((u) => u.owner === enemy)!;
+    const attacker = Object.values(state.units).find((u) => u.owner === me && u.type === "infantry")!;
+    const defender = Object.values(state.units).find((u) => u.owner === enemy && u.type === "infantry")!;
 
     attacker.province = pair!.from;
     attacker.strength = 200;

@@ -4,7 +4,7 @@
       "id": "europe-3",
       "name": "欧洲 · 3 国",
       "difficulty": 3,
-      "provinceCount": 30,
+      "provinceCount": 39,
       "playable": [
         "FRA",
         "DEU",
@@ -121,7 +121,7 @@
       "id": "europe-5",
       "name": "欧洲 · 5 国",
       "difficulty": 5,
-      "provinceCount": 50,
+      "provinceCount": 59,
       "playable": [
         "FRA",
         "DEU",
@@ -240,7 +240,7 @@
       "id": "europe-7",
       "name": "欧洲 · 7 国",
       "difficulty": 7,
-      "provinceCount": 70,
+      "provinceCount": 79,
       "playable": [
         "FRA",
         "DEU",

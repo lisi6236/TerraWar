@@ -19,7 +19,11 @@ export type Terrain =
   | "desert"   // 沙漠
   | "urban"    // 城市核心区
   | "coast"    // 海岸（过渡）
-  | "island";  // 岛礁
+  | "island"   // 岛礁
+  | "near_sea" // 近海
+  | "deep_sea" // 远洋
+  | "strait"   // 海峡
+  | "canal";   // 运河
 
 /** 补给状态 */
 export type SupplyState = "ok" | "low" | "cut";
@@ -127,7 +131,8 @@ export interface Unit {
   morale: number;        // 0~100
   supply: SupplyState;
   general?: { name: string; level: GeneralLevel };
-  cargo?: UnitId[];      // 运输舰队搭载的陆军单位
+  cargo?: UnitId[];      // 运输舰队搭载的陆军单位（最多 1 个）
+  embarkedOn?: UnitId;   // 若本单位正在运输舰上，记录运输舰 id
   movedThisTurn: number;
   entrenchedTurns: number;
 }
@@ -172,7 +177,7 @@ export interface MapData {
 /** 事件日志 */
 export interface LogEntry {
   turn: number;
-  kind: "move" | "block" | "occupy" | "annex" | "economy" | "battle" | "merge" | "system";
+  kind: "move" | "block" | "occupy" | "annex" | "economy" | "battle" | "merge" | "supply" | "air" | "system";
   text: string;
 }
 

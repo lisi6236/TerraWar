@@ -10,6 +10,10 @@ export const TERRAIN_TONE: Record<Terrain, string> = {
   desert: "#cfbc92",
   coast: "#cdc7b6",
   island: "#cdc7b6",
+  near_sea: "#1f4257",
+  deep_sea: "#1b3b4f",
+  strait: "#2a5b7a",
+  canal: "#2a5b7a",
 };
 
 export const NEUTRAL_FALLBACK = "#cdc7b6";

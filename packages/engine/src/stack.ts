@@ -5,6 +5,7 @@ import { pushLog, type MapIndex } from "./state";
 export function mergeStacks(state: GameState, map: MapIndex): void {
   const groups = new Map<string, string[]>();
   for (const u of Object.values(state.units)) {
+    if (u.embarkedOn) continue;   // 已登船的单位不参与合兵
     const key = u.province + "|" + u.owner + "|" + u.type;
     const arr = groups.get(key) ?? [];
     arr.push(u.id);

@@ -3,6 +3,7 @@ import { geoCentroid, geoMercator, geoPath } from "d3-geo";
 import { feature, mesh } from "topojson-client";
 import type { GameState, MapData, Order } from "@terrawar/shared";
 import { NEUTRAL_GARRISON_STRENGTH } from "@terrawar/shared";
+import { supplyStroke, unitShape } from "../game/unitInfo";
 import { NEUTRAL_FALLBACK, TERRAIN_TONE } from "../game/colors";
 
 export interface SplitControl {
@@ -62,10 +63,11 @@ export function MapView({
   }, [topo, state.provinces, state.playerNation]);
 
   const unitsByProvince = useMemo(() => {
-    const m = new Map<string, { id: string; owner: string; strength: number }[]>();
+    const m = new Map<string, { id: string; owner: string; strength: number; type: string; supply: string; embarked: boolean }[]>();
     for (const u of Object.values(state.units)) {
       const arr = m.get(u.province) ?? [];
-      arr.push({ id: u.id, owner: u.owner, strength: u.strength });
+      if (u.embarkedOn) continue;   // 已登船的单位不单独显示
+      arr.push({ id: u.id, owner: u.owner, strength: u.strength, type: u.type, supply: u.supply, embarked: false });
       m.set(u.province, arr);
     }
     return m;
@@ -92,11 +94,15 @@ export function MapView({
           const id: string = f.properties.id;
           const stat = staticById.get(id);
           const owner = ownerOf(id);
-          const fill = owner
-            ? state.nations[owner]?.color ?? NEUTRAL_FALLBACK
-            : TERRAIN_TONE[(stat?.terrain ?? "plain") as keyof typeof TERRAIN_TONE] ?? NEUTRAL_FALLBACK;
+          const isSea = stat?.kind === "sea";
+          const fill = isSea
+            ? (owner ? state.nations[owner]?.color ?? "#2a5b7a" : "#1f4257")
+            : owner
+              ? state.nations[owner]?.color ?? NEUTRAL_FALLBACK
+              : TERRAIN_TONE[(stat?.terrain ?? "plain") as keyof typeof TERRAIN_TONE] ?? NEUTRAL_FALLBACK;
           const cls = [
             "province",
+            isSea ? "sea-zone" : "",
             owner ? "" : "neutral",
             id === selectedProvinceId ? "selected" : "",
             reachSet.has(id) ? "reachable" : "",
@@ -107,6 +113,7 @@ export function MapView({
               d={geo.path(f) || undefined}
               className={cls}
               fill={fill}
+              fillOpacity={isSea ? (owner ? 0.55 : 0.4) : 1}
               onClick={(e) => onProvinceClick(id, e.ctrlKey || e.metaKey)}
               onMouseMove={(e) =>
                 setHover({
@@ -157,6 +164,8 @@ export function MapView({
           return list.map((u, i) => {
             const dx = (i - (list.length - 1) / 2) * 15;
             const isMine = state.nations[u.owner]?.isPlayer;
+            const shape = unitShape(u.type);
+            const color = state.nations[u.owner]?.color ?? "#888";
             return (
               <g
                 key={u.id}
@@ -164,8 +173,13 @@ export function MapView({
                 transform={`translate(${c[0] + dx}, ${c[1]})`}
                 onClick={(e) => { e.stopPropagation(); onUnitClick(u.id); }}
               >
-                <circle r={8} fill={state.nations[u.owner]?.color ?? "#888"} />
-                <circle r={8} className="unit-ring" />
+                {shape === "naval" ? (
+                  <path d="M0,-9 L9,0 L0,9 L-9,0 Z" className="unit-body" style={{ fill: color, stroke: supplyStroke(u.supply) }} />
+                ) : shape === "air" ? (
+                  <path d="M0,-9 L9,7 L-9,7 Z" className="unit-body" style={{ fill: color, stroke: supplyStroke(u.supply) }} />
+                ) : (
+                  <circle r={8} className="unit-body" style={{ fill: color, stroke: supplyStroke(u.supply) }} />
+                )}
                 <text y={3} className="unit-label">{Math.round(u.strength)}</text>
               </g>
             );

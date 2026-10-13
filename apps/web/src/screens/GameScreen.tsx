@@ -8,6 +8,7 @@ import { generateAiOrders } from "@terrawar/engine";
 import { MapView } from "../map/MapView";
 import { hasSave, loadGame, saveGame } from "../game/save";
 import { TERRAIN_LABEL } from "../map/types";
+import { SUPPLY_LABEL, unitTypeName } from "../game/unitInfo";
 
 interface Props {
   topo: any;
@@ -32,7 +33,7 @@ function useSize(ref: RefObject<HTMLDivElement>) {
 
 const LOG_LABEL: Record<string, string> = {
   move: "移动", block: "受阻", occupy: "占领", annex: "吞并",
-  battle: "战斗", merge: "合兵", economy: "财政", system: "系统",
+  battle: "战斗", merge: "合兵", economy: "财政", supply: "补给", air: "空军", system: "系统",
 };
 
 const LAND_CAP = 200;
@@ -220,8 +221,10 @@ export function GameScreen({ topo, mapData, seed, onExit }: Props) {
           <h3>选中</h3>
           {selUnit && (
             <div className="hint">
-              军团 {selUnit.id}（兵力 <b>{Math.round(selUnit.strength)}</b>，士气 {Math.round(selUnit.morale)}）<br />
-              位于 {mapIndex.byId[selUnit.province]?.name}，可行动 {reachable.length} 个相邻地块<br />
+              {unitTypeName(selUnit.type)} {selUnit.id}（兵力 <b>{Math.round(selUnit.strength)}</b>，士气 {Math.round(selUnit.morale)}，
+              补给 {SUPPLY_LABEL[selUnit.supply] ?? selUnit.supply}
+              {selUnit.embarkedOn ? "，已登船" : ""}）<br />
+              位于 {mapIndex.byId[selUnit.province]?.name}，可行动 {reachable.length} 个目标<br />
               <b>按住 Ctrl</b>：兵团旁出现分兵框（▲▼ 或滚轮调整，50 一档），
               {ctrlHeld ? <>当前将派出 <b>{sendAmount}</b></> : "再点击目标地块执行"}
             </div>

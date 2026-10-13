@@ -1,9 +1,8 @@
-// 战斗结算（实现《战斗结算公式与数值规则》§2 / §3.1）
-// 说明：制空权（需空军，M4）与包围（包围判定未实现）暂按 ×1.0 占位，接口已留。
+// 战斗结算（陆战《战斗结算公式》§3.1 + 海战 §3.2）
 import type { GameState, Province, Unit } from "@terrawar/shared";
 import {
-  AIR_SUPREMACY_LAND, BASE_ATTRITION, ENCIRCLE_MODIFIER, FORTRESS_DEFENSE,
-  GENERAL_MODIFIER, MORALE, MORALE_ANCHORS, SUPPLY_MODIFIER, TERRAIN_DEFENSE,
+  AIR_SUPREMACY_LAND, AIR_SUPREMACY_SEA, BASE_ATTRITION, ENCIRCLE_MODIFIER,
+  FORTRESS_DEFENSE, GENERAL_MODIFIER, MORALE, SEA_MODIFIERS, SUPPLY_MODIFIER, TERRAIN_DEFENSE,
 } from "@terrawar/shared";
 import { moraleModifier } from "./morale";
 
@@ -11,24 +10,56 @@ export { moraleModifier };
 
 export type BattleRole = "attacker" | "defender";
 
+export interface PowerContext {
+  /** 该地块掌握制空权的国家（null = 均势或无空军参与） */
+  airOwner?: string | null;
+  /** 海战：是否远离本土港口 */
+  farFromPort?: boolean;
+  /** 两栖登陆（攻方） */
+  amphibious?: boolean;
+  /** 登陆时海军舰炮支援 / 空军支援 */
+  navalGunfire?: boolean;
+  airSupport?: boolean;
+}
+
 function terrainMul(state: GameState, province: Province): number {
   const fort = (state.provinces[province.id]?.buildings.fortress ?? 0) as 0 | 1 | 2 | 3;
   return (TERRAIN_DEFENSE[province.terrain] ?? 1) * (FORTRESS_DEFENSE[fort] ?? 1);
 }
 
-/** 最终战力 = 基础(当前兵力) × 地形 × 设施 × 补给 × 制空 × 士气 × 包围 × 将领 */
-export function finalPower(state: GameState, unit: Unit, province: Province, role: BattleRole): number {
+/** 最终战力（陆战 / 海战；含制空权与两栖修正） */
+export function finalPower(
+  state: GameState, unit: Unit, province: Province, role: BattleRole, ctx: PowerContext = {},
+): number {
+  const isSea = province.kind === "sea";
   let mul = 1;
   mul *= SUPPLY_MODIFIER[unit.supply] ?? 1;
-  mul *= AIR_SUPREMACY_LAND.neutral;                      // 制空权：M4 接入空军前按均势
   mul *= moraleModifier(unit.morale);
   mul *= unit.general ? GENERAL_MODIFIER[unit.general.level] : 1;
-  if (role === "defender") mul *= terrainMul(state, province);
-  else mul *= ENCIRCLE_MODIFIER.one;                      // 包围修正：未实现包围判定，按单侧
+
+  const airTable = isSea ? AIR_SUPREMACY_SEA : AIR_SUPREMACY_LAND;
+  if (ctx.airOwner) mul *= ctx.airOwner === unit.owner ? airTable.own : airTable.enemy;
+  else mul *= AIR_SUPREMACY_LAND.neutral;      // 均势 ×1.0
+
+  if (isSea) {
+    if (role === "defender" && province.terrain === "strait") mul *= SEA_MODIFIERS.straitDefender;
+    if (role === "attacker" && province.terrain === "deep_sea") mul *= SEA_MODIFIERS.openSeaAttacker;
+    if (ctx.farFromPort) mul *= SEA_MODIFIERS.farFromPort;
+  } else if (role === "defender") {
+    mul *= terrainMul(state, province);
+  } else {
+    mul *= ENCIRCLE_MODIFIER.one;              // 包围判定未实现，按单侧
+  }
+
+  if (role === "attacker" && ctx.amphibious) {
+    mul *= 0.7;                                // 登陆场劣势
+    if (ctx.navalGunfire) mul *= 1.15;         // 海军舰炮支援
+    if (ctx.airSupport) mul *= 1.1;            // 空军支援
+  }
   return unit.strength * mul;
 }
 
-/** 空白区守军（民兵）的最终战力：按正常士气、享受地形/要塞加成 */
+/** 空白区守军（民兵）战力：正常士气 + 地形 / 要塞加成 */
 export function garrisonPower(state: GameState, province: Province, strength: number): number {
   let mul = SUPPLY_MODIFIER.ok * AIR_SUPREMACY_LAND.neutral * moraleModifier(MORALE.initial);
   mul *= terrainMul(state, province);
@@ -45,7 +76,6 @@ export interface BattleResult {
   attackerWins: boolean;
 }
 
-/** 核心：按文档公式算战损，战后兵力多者获胜 */
 function core(aStrength: number, aPower: number, dStrength: number, dPower: number): BattleResult {
   const total = aPower + dPower || 1;
   const attackerLoss = aStrength * (dPower / total) * BASE_ATTRITION;
@@ -59,20 +89,20 @@ function core(aStrength: number, aPower: number, dStrength: number, dPower: numb
   };
 }
 
-/** 单位 vs 单位 */
-export function resolveBattle(state: GameState, province: Province, attacker: Unit, defender: Unit): BattleResult {
+export function resolveBattle(
+  state: GameState, province: Province, attacker: Unit, defender: Unit, ctx: PowerContext = {},
+): BattleResult {
   return core(
-    attacker.strength, finalPower(state, attacker, province, "attacker"),
-    defender.strength, finalPower(state, defender, province, "defender"),
+    attacker.strength, finalPower(state, attacker, province, "attacker", ctx),
+    defender.strength, finalPower(state, defender, province, "defender", ctx),
   );
 }
 
-/** 单位 vs 空白区守军 */
 export function resolveBattleVsGarrison(
-  state: GameState, province: Province, attacker: Unit, garrisonStrength: number,
+  state: GameState, province: Province, attacker: Unit, garrisonStrength: number, ctx: PowerContext = {},
 ): BattleResult {
   return core(
-    attacker.strength, finalPower(state, attacker, province, "attacker"),
+    attacker.strength, finalPower(state, attacker, province, "attacker", ctx),
     garrisonStrength, garrisonPower(state, province, garrisonStrength),
   );
 }

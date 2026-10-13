@@ -1,7 +1,7 @@
 // AI 决策（M3 简单 AI：规则 + 权重，不含搜索/学习）
 // 每个 AI 国家按个性（野心/亲善/扩张/冒险）评估相邻地块，产出移动/进攻指令。
 import type { GameState, Order, ProvinceId, Unit } from "@terrawar/shared";
-import { LAND_CAPACITY_STRENGTH, NEUTRAL_GARRISON_STRENGTH, SPLIT_STEP } from "@terrawar/shared";
+import { LAND_CAPACITY_STRENGTH, NEUTRAL_GARRISON_STRENGTH, SPLIT_STEP, UNIT_SPECS } from "@terrawar/shared";
 import { unitsIn, type MapIndex } from "./state";
 import { reachableProvinces } from "./movement";
 
@@ -70,6 +70,7 @@ export function generateAiOrders(state: GameState, map: MapIndex): Order[] {
       .sort((a, b) => b.strength - a.strength || (a.id < b.id ? -1 : 1));
 
     for (const unit of units) {
+      if (UNIT_SPECS[unit.type]?.requiresAirbase) continue;   // 空军决策待 M5
       const targets = reachableProvinces(state, map, unit.id).filter((t) => !claimed.has(t));
       let best: { to: ProvinceId; score: number } | null = null;
       for (const to of targets) {

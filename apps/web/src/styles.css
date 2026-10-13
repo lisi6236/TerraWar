@@ -138,3 +138,10 @@ button.mini { margin-left: 8px; background: transparent; border: 1px solid var(-
 .garrison { pointer-events: none; }
 .garrison circle { fill: rgba(18,22,29,.6); stroke: #6b7482; stroke-width: .8; }
 .garrison text { fill: #b9c2ce; font-size: 7px; font-weight: 700; text-anchor: middle; }
+/* ---------- 海区 / 舰船与飞机 / 补给 ---------- */
+.province.sea-zone { stroke: rgba(130,180,215,.45); stroke-width: .8; }
+.unit-body { stroke-width: 1.6; }
+.unit.mine .unit-body { stroke-width: 2.2; }
+.unit.selected .unit-body { stroke-width: 2.8; }
+.log .k-supply { color: #d08a6a; }
+.log .k-air { color: #9cc3d5; }

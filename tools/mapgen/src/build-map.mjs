@@ -8,6 +8,7 @@ import { loadCountryAdm1 } from "./fetch.mjs";
 import { MAPS, PLAYABLE_PROVINCES, EUROPE_BBOX, NATION_META } from "./config.mjs";
 import { toMultiPolygon, multiPolygonCentroid, multiPolygonArea, distance, mergeMultiPolygons } from "./geo.mjs";
 import { clusterUnits } from "./cluster.mjs";
+import { buildSeaZones } from "./sea.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = path.resolve(__dirname, "../../../packages/map-data/maps");
@@ -219,13 +220,52 @@ export async function buildAllMaps() {
   for (const map of MAPS) {
     const provinces = buildMapProvinces(units, byCountry, map, unitAdj);
     const adjacency = computeProvinceAdjacency(units, provinces, unitAdj);
-    const features = finalize(provinces, adjacency, map);
+    const landFeatures = finalize(provinces, adjacency, map);
+
+    // 海区：按经纬网格剔除陆地后聚类，并与陆地省建立双向邻接
+    const { zones, landAdjacency } = buildSeaZones(units, { step: 1.2, targetZones: 9 });
+    const idByUnitIndex = new Map();
+    for (const p of provinces) for (const m of p.members) idByUnitIndex.set(m, p.id);
+
+    const seaLinks = new Map(); // zoneId -> Set(provinceId)
+    for (const [unitIdx, zoneIds] of landAdjacency) {
+      const pid = idByUnitIndex.get(unitIdx);
+      if (!pid) continue;
+      const lf = landFeatures.find((x) => x.properties.id === pid);
+      for (const zid of zoneIds) {
+        if (lf && !lf.properties.adjacency.includes(zid)) lf.properties.adjacency.push(zid);
+        if (!seaLinks.has(zid)) seaLinks.set(zid, new Set());
+        seaLinks.get(zid).add(pid);
+      }
+    }
+
+    const seaFeatures = zones.map((z) => ({
+      type: "Feature",
+      properties: {
+        id: z.id,
+        name: z.name,
+        kind: "sea",
+        terrain: z.seaType,
+        ownerAtStart: null,
+        isCapital: false,
+        isCore: false,
+        isChoke: z.seaType === "strait",
+        population: 0,
+        base: { steel: 0, oil: 0, food: 0, fund: 0 },
+        sourceUnits: [],
+        color: "#1f4257",
+        adjacency: [...(seaLinks.get(z.id) ?? []), ...z.neighbors],
+        defenseBonus: 1,
+      },
+      geometry: { type: "MultiPolygon", coordinates: z.coords },
+    }));
+    const features = [...landFeatures, ...seaFeatures];
     const topo = topology({ provinces: { type: "FeatureCollection", features } }, 1e5);
     const outFile = path.join(OUT_DIR, map.id + ".topojson.json");
     await writeFile(outFile, JSON.stringify(topo));
 
     // 健康检查
-    const isolated = features.filter((f, i) => adjacency[i].length === 0).map((f) => f.properties.id);
+    const isolated = features.filter((f) => (f.properties.adjacency ?? []).length === 0).map((f) => f.properties.id);
     const playableCounts = {};
     for (const f of features) if (f.properties.ownerAtStart) playableCounts[f.properties.ownerAtStart] = (playableCounts[f.properties.ownerAtStart] || 0) + 1;
 
@@ -236,7 +276,7 @@ export async function buildAllMaps() {
       nations: Object.fromEntries(Object.entries(NATION_META).map(([k, v]) => [k, v])),
       file: map.id + ".topojson.json",
     });
-    console.log("[mapgen] " + map.id + ": provinces=" + features.length +
+    console.log("[mapgen] " + map.id + ": 陆地省=" + landFeatures.length + " 海区=" + seaFeatures.length +
       " playable=" + JSON.stringify(playableCounts) +
       (isolated.length ? " isolated=" + isolated.join(",") : " isolated=none"));
   }

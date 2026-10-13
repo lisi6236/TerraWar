@@ -95,7 +95,7 @@ export function createGame(map: MapData, opts: CreateGameOptions = {}): GameStat
     log: [],
   };
 
-  // 开局军队：每个国家 2 个合成陆军军团（首都 + 人口最大省）
+  // 开局军队：每国 2 个合成陆军军团（首都 + 人口最大省）
   for (const id of Object.keys(nations)) {
     const own = map.provinces.filter((p) => p.ownerAtStart === id);
     const capital = own.find((p) => p.isCapital) ?? own[0];
@@ -104,6 +104,19 @@ export function createGame(map: MapData, opts: CreateGameOptions = {}): GameStat
       .sort((a, b) => b.population - a.population)[0] ?? capital;
     spawnUnit(state, "infantry", id, capital.id);
     spawnUnit(state, "infantry", id, second.id);
+
+    // 空军：1 支战术航空队驻首都（简化：暂不强制机场）
+    spawnUnit(state, "tactical_air", id, capital.id);
+
+    // 海军：找到与该国沿海省份相邻的海区，部署 1 舰队 + 1 运输舰队
+    const seaZoneId = own
+      .flatMap((p) => p.adjacency)
+      .map((pid) => map.provinces.find((x) => x.id === pid))
+      .find((p) => p && p.kind === "sea");
+    if (seaZoneId) {
+      spawnUnit(state, "fleet", id, seaZoneId.id);
+      spawnUnit(state, "transport", id, seaZoneId.id);
+    }
   }
   void idx;
 
