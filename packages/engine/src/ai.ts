@@ -1,7 +1,7 @@
 // AI 决策（M3 简单 AI：规则 + 权重，不含搜索/学习）
 // 每个 AI 国家按个性（野心/亲善/扩张/冒险）评估相邻地块，产出移动/进攻指令。
 import type { GameState, Order, ProvinceId, Unit } from "@terrawar/shared";
-import { LAND_CAPACITY_STRENGTH, SPLIT_STEP } from "@terrawar/shared";
+import { LAND_CAPACITY_STRENGTH, NEUTRAL_GARRISON_STRENGTH, SPLIT_STEP } from "@terrawar/shared";
 import { unitsIn, type MapIndex } from "./state";
 import { reachableProvinces } from "./movement";
 
@@ -37,7 +37,10 @@ function scoreTarget(
   }
 
   if (rt.owner === null) {
-    let score = 8 + p.expansionism * 16;
+    // 空白区有默认守军（50）：胜算不足就不打
+    const need = NEUTRAL_GARRISON_STRENGTH * (1.4 - p.riskTolerance * 0.3);
+    if (unit.strength < need) return null;
+    let score = 10 + p.expansionism * 16 + (unit.strength / NEUTRAL_GARRISON_STRENGTH - 1.4) * 6;
     if (prov.isCore) score += 7;
     if (prov.isCapital) score += 5;
     return score;
@@ -77,8 +80,10 @@ export function generateAiOrders(state: GameState, map: MapIndex): Order[] {
       if (!best || best.score < 8) continue;
 
       const room = strengthAmong(unitsIn(state, best.to), nation.id);
-      const defenders = unitsIn(state, best.to).some((u) => u.owner !== nation.id);
-      const capacity = defenders ? unit.strength : Math.max(0, LAND_CAPACITY_STRENGTH - room);
+      const here = unitsIn(state, best.to);
+      const defenders = here.some((u) => u.owner !== nation.id);
+      const emptyNeutral = (state.provinces[best.to]?.owner ?? null) === null && here.length === 0;
+      const capacity = (defenders || emptyNeutral) ? unit.strength : Math.max(0, LAND_CAPACITY_STRENGTH - room);
       const send = Math.min(unit.strength, floorToStep(capacity));
       if (send < SPLIT_STEP) continue;
 

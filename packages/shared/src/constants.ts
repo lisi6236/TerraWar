@@ -112,3 +112,5 @@ export const STATE_VERSION = 1;
 /** 战斗胜负士气变化（《战斗结算公式》§4.2） */
 export const MORALE_WIN = 10;
 export const MORALE_LOSS = 15;
+/** 空白未占领区的默认守军兵力（占领需先击败它；战胜后其残部并入攻方） */
+export const NEUTRAL_GARRISON_STRENGTH = 50;

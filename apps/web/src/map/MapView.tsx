@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { geoCentroid, geoMercator, geoPath } from "d3-geo";
 import { feature, mesh } from "topojson-client";
 import type { GameState, MapData, Order } from "@terrawar/shared";
+import { NEUTRAL_GARRISON_STRENGTH } from "@terrawar/shared";
 import { NEUTRAL_FALLBACK, TERRAIN_TONE } from "../game/colors";
 
 export interface SplitControl {
@@ -110,7 +111,9 @@ export function MapView({
               onMouseMove={(e) =>
                 setHover({
                   text: stat?.name ?? id,
-                  sub: owner ? state.nations[owner]?.name ?? owner : "空白未占领区",
+                  sub: owner
+                    ? state.nations[owner]?.name ?? owner
+                    : "空白未占领区 · 守军 " + NEUTRAL_GARRISON_STRENGTH,
                   x: e.clientX, y: e.clientY,
                 })
               }
@@ -131,6 +134,19 @@ export function MapView({
               <g key={"cap-" + f.properties.id} className="capital">
                 <circle cx={c[0]} cy={c[1]} r={5} />
                 <circle cx={c[0]} cy={c[1]} r={2} className="capital-core" />
+              </g>
+            );
+          })}
+
+        {geo.features
+          .filter((f) => f.properties.kind === "land" && (state.provinces[f.properties.id]?.owner ?? null) === null)
+          .map((f) => {
+            const c = geo.centroidById.get(f.properties.id);
+            if (!c) return null;
+            return (
+              <g key={"gar-" + f.properties.id} className="garrison" transform={`translate(${c[0]}, ${c[1]})`}>
+                <circle r={7} />
+                <text y={3}>{NEUTRAL_GARRISON_STRENGTH}</text>
               </g>
             );
           })}

@@ -137,7 +137,7 @@ function buildMapProvinces(units, byCountry, map, unitAdj) {
           isCapital: false,
           isCore,
           isChoke: false,
-          population: Math.max(30, Math.round(area * 900)),
+          population: Math.max(20, Math.round(area * 40)),
           sourceUnits: memberUnits.map((u) => u.name),
         },
       });

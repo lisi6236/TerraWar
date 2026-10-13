@@ -1,9 +1,12 @@
-// 移动、分兵、进攻与冲突裁决
+// 移动、分兵、进攻、合兵前处理与冲突裁决
 // 规则见 docs/开发计划与实现方案.md 附录 A / B
 import type { GameState, Order, ProvinceId, Unit } from "@terrawar/shared";
-import { LAND_CAPACITY_STRENGTH, MORALE, MORALE_LOSS, MORALE_WIN, SPLIT_STEP } from "@terrawar/shared";
+import {
+  LAND_CAPACITY_STRENGTH, MORALE, MORALE_LOSS, MORALE_WIN,
+  NEUTRAL_GARRISON_STRENGTH, SPLIT_STEP,
+} from "@terrawar/shared";
 import { pushLog, spawnUnit, unitsIn, type MapIndex } from "./state";
-import { resolveBattle } from "./combat";
+import { resolveBattle, resolveBattleVsGarrison, type BattleResult } from "./combat";
 
 export function unitLabel(state: GameState, u: Unit): string {
   const nation = state.nations[u.owner]?.name ?? u.owner;
@@ -18,7 +21,7 @@ function removeUnit(state: GameState, u: Unit): void {
   delete state.units[u.id];
 }
 
-/** 当前真正"驻守"在该地块的单位（排除尚未抵达的移动单位） */
+/** 当前真正驻守在该地块的单位（排除尚未抵达的移动单位） */
 function occupantsOf(state: GameState, province: ProvinceId, moving: Set<string>): Unit[] {
   return unitsIn(state, province).filter((u) => !moving.has(u.id));
 }
@@ -27,7 +30,7 @@ function strengthUnits(units: Unit[], owner: string): number {
   return units.filter((u) => u.owner === owner).reduce((s, u) => s + u.strength, 0);
 }
 
-/** 可移动 / 可进攻的地块：相邻 + 陆地；敌占也可（转为进攻） */
+/** 可移动 / 可进攻的地块：相邻 + 陆地；敌占与空白区守军均可进攻 */
 export function reachableProvinces(state: GameState, map: MapIndex, unitId: string): ProvinceId[] {
   const u = state.units[unitId];
   if (!u || u.strength <= 0) return [];
@@ -38,8 +41,10 @@ export function reachableProvinces(state: GameState, map: MapIndex, unitId: stri
     const target = map.byId[to];
     if (!target || target.kind !== "land") continue;
     const here = unitsIn(state, to);
-    if (here.some((x) => x.owner !== u.owner)) { out.push(to); continue; }   // 敌占 -> 进攻
-    if (strengthUnits(here, u.owner) >= LAND_CAPACITY_STRENGTH) continue;   // 己方驻军已满
+    const owner = state.provinces[to]?.owner ?? null;
+    const defended = here.some((x) => x.owner !== u.owner) || (owner === null && here.length === 0);
+    if (defended) { out.push(to); continue; }                               // 需战斗
+    if (strengthUnits(here, u.owner) >= LAND_CAPACITY_STRENGTH) continue;    // 己方驻军已满
     out.push(to);
   }
   return out;
@@ -47,21 +52,6 @@ export function reachableProvinces(state: GameState, map: MapIndex, unitId: stri
 
 export function canOrderMove(state: GameState, map: MapIndex, unitId: string, to: ProvinceId): boolean {
   return reachableProvinces(state, map, unitId).includes(to);
-}
-
-/** 败退目的地：相邻陆地、无敌军、且为己方或空白地块 */
-function findRetreat(state: GameState, map: MapIndex, u: Unit): ProvinceId | null {
-  const from = map.byId[u.province];
-  if (!from) return null;
-  for (const id of from.adjacency.filter((x) => map.byId[x]?.kind === "land").sort()) {
-    const here = unitsIn(state, id);
-    if (here.some((x) => x.owner !== u.owner)) continue;
-    const owner = state.provinces[id]?.owner ?? null;
-    if (owner !== null && owner !== u.owner) continue;
-    if (strengthUnits(here, u.owner) + u.strength > LAND_CAPACITY_STRENGTH) continue;
-    return id;
-  }
-  return null;
 }
 
 export function resolveMovements(state: GameState, map: MapIndex, orders: Order[]): void {
@@ -122,13 +112,15 @@ export function resolveMovements(state: GameState, map: MapIndex, orders: Order[
 
     for (const p of list) {
       if (!state.units[p.unit.id] || p.unit.strength <= 0) continue;
-      moving.delete(p.unit.id);   // 该单位已抵达处理点：此后它算作地块驻军
+      moving.delete(p.unit.id);   // 该单位已抵达处理点：此后算作地块驻军
 
       const here = occupantsOf(state, to, moving);
       const hostile = here.filter((u) => u.owner !== p.unit.owner);
+      const owner = state.provinces[to]?.owner ?? null;
+      const garrison = owner === null && hostile.length === 0 ? NEUTRAL_GARRISON_STRENGTH : 0;
 
-      // 2.1 无敌方驻军 -> 直接进入
-      if (!hostile.length) {
+      // 2.1 无任何守军 -> 直接进入
+      if (!hostile.length && garrison === 0) {
         if (strengthUnits(here, p.unit.owner) + p.unit.strength > LAND_CAPACITY_STRENGTH) {
           pushLog(state, "block", `${unitLabel(state, p.unit)} 无法进入 ${province.name}：驻军已达上限 ${LAND_CAPACITY_STRENGTH}`);
           continue;
@@ -138,44 +130,51 @@ export function resolveMovements(state: GameState, map: MapIndex, orders: Order[
         continue;
       }
 
-      // 2.2 有敌方驻军 -> 战斗
-      const defender = hostile.slice().sort((a, b) => b.strength - a.strength || (a.id < b.id ? -1 : 1))[0];
-      const r = resolveBattle(state, province, p.unit, defender);
+      // 2.2 战斗
+      let r: BattleResult;
+      let defenderDesc: string;
+      if (hostile.length) {
+        const defender = hostile.slice().sort((a, b) => b.strength - a.strength || (a.id < b.id ? -1 : 1))[0];
+        r = resolveBattle(state, province, p.unit, defender);
+        defenderDesc = unitLabel(state, defender);
+      } else {
+        r = resolveBattleVsGarrison(state, province, p.unit, garrison);
+        defenderDesc = `${province.name} 空白区守军(${garrison})`;
+      }
+
       p.unit.strength = Math.round(r.attackerRemaining);
-      defender.strength = Math.round(r.defenderRemaining);
-
       pushLog(state, "battle",
-        `${unitLabel(state, p.unit)} 进攻 ${province.name}：攻方战力 ${Math.round(r.attackerPower)} vs 守方 ${Math.round(r.defenderPower)}，双方损失 ${Math.round(r.attackerLoss)} / ${Math.round(r.defenderLoss)}，战后兵力 ${p.unit.strength} : ${defender.strength}`);
+        `${unitLabel(state, p.unit)} 进攻 ${province.name}：攻方战力 ${Math.round(r.attackerPower)} vs 守方 ${Math.round(r.defenderPower)}，损失 ${Math.round(r.attackerLoss)} / ${Math.round(r.defenderLoss)}，战后兵力 ${p.unit.strength} : ${Math.round(r.defenderRemaining)}`);
 
-      if (defender.strength <= 0) removeUnit(state, defender);
+      if (hostile.length) {
+        const defender = hostile.slice().sort((a, b) => b.strength - a.strength || (a.id < b.id ? -1 : 1))[0];
+        defender.strength = Math.round(r.defenderRemaining);
+        if (defender.strength <= 0) removeUnit(state, defender);
+      }
       if (p.unit.strength <= 0) removeUnit(state, p.unit);
 
       if (r.attackerWins && p.unit.strength > 0) {
-        for (const h of hostile) {
-          const cur = state.units[h.id];
-          if (!cur) continue;
-          if (cur.strength <= 0) { removeUnit(state, cur); continue; }
-          const fromName = map.byId[cur.province]?.name ?? cur.province;
-          const dest = findRetreat(state, map, cur);
-          if (dest) {
-            cur.province = dest;
-            cur.morale = clampMorale(cur.morale - MORALE_LOSS);
-            pushLog(state, "battle", `${unitLabel(state, cur)} 战败，从 ${fromName} 撤退至 ${map.byId[dest].name}`);
-          } else {
-            pushLog(state, "battle", `${unitLabel(state, cur)} 无路可退，全军覆没`);
+        // 战胜：收编被击败方的战后兵力（空白区守军残部同样并入）
+        let absorbed = Math.round(r.defenderRemaining);   // 空白区守军残部
+        if (hostile.length) {
+          absorbed = 0;
+          for (const h of hostile) {
+            const cur = state.units[h.id];
+            if (!cur) continue;
+            absorbed += Math.max(0, Math.round(cur.strength));
             removeUnit(state, cur);
           }
         }
+        p.unit.strength += absorbed;
         p.unit.morale = clampMorale(p.unit.morale + MORALE_WIN);
         p.unit.province = to;
+        pushLog(state, "battle", `${unitLabel(state, p.unit)} 击败 ${defenderDesc}，收编残部 ${absorbed} 兵力，现员 ${p.unit.strength}`);
         pushLog(state, "occupy", `${unitLabel(state, p.unit)} 攻占 ${province.name}`);
+      } else if (p.unit.strength > 0) {
+        p.unit.morale = clampMorale(p.unit.morale - MORALE_LOSS);
+        pushLog(state, "block", `${unitLabel(state, p.unit)} 进攻 ${province.name} 失利，退回 ${map.byId[p.from].name}`);
       } else {
-        if (p.unit.strength > 0) {
-          p.unit.morale = clampMorale(p.unit.morale - MORALE_LOSS);
-          pushLog(state, "block", `${unitLabel(state, p.unit)} 进攻 ${province.name} 失利，退回 ${map.byId[p.from].name}`);
-        } else {
-          pushLog(state, "battle", `${unitLabel(state, p.unit)} 全军覆没`);
-        }
+        pushLog(state, "battle", `${unitLabel(state, p.unit)} 全军覆没`);
       }
     }
   }

@@ -134,3 +134,7 @@ button.mini { margin-left: 8px; background: transparent; border: 1px solid var(-
 .topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 .topbar-actions button[disabled] { opacity: .4; cursor: not-allowed; }
 .flash { color: var(--accent); font-size: 12px; }
+/* ---------- 空白区守军标记 ---------- */
+.garrison { pointer-events: none; }
+.garrison circle { fill: rgba(18,22,29,.6); stroke: #6b7482; stroke-width: .8; }
+.garrison text { fill: #b9c2ce; font-size: 7px; font-weight: 700; text-anchor: middle; }

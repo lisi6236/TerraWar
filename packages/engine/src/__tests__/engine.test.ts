@@ -63,7 +63,7 @@ describe("移动 / 分兵 / 合并", () => {
     expect(reachableProvinces(s, m, u.id)).toEqual(["B"]);
   });
 
-  it("进入空白省并占领，抵抗值按人口计算并随回合衰减", () => {
+  it("空白区有 50 守军；击败后收编残部并占领", () => {
     const map = makeMap();
     const m = indexMap(map);
     let s = createGame(map, { seed: 3 });
@@ -71,8 +71,10 @@ describe("移动 / 分兵 / 合并", () => {
     s = endTurn(s, m, [{ type: "move", unitId: u.id, to: "C" }]);
     expect(s.provinces.C.owner).toBe("FRA");
     expect(s.units[u.id].province).toBe("C");
-    // 占领当回合即开始衰减：驻军 100 战力 x 0.2 = 20，50 - 20 = 30
-    expect(s.provinces.C.resistance).toBeCloseTo(30, 5);
+    // 100 打 50（平原）：战后 90 : 40 -> 收编 40 -> 130
+    expect(s.units[u.id].strength).toBe(130);
+    // 抵抗值 100×0.5=50，当回合衰减 130×0.2=26 -> 24
+    expect(s.provinces.C.resistance).toBeCloseTo(24, 5);
   });
 
   it("同兵种在同一地块自动合并为一支（兵力相加）", () => {
@@ -86,16 +88,17 @@ describe("移动 / 分兵 / 合并", () => {
     expect(inA[0].strength).toBe(200);
   });
 
-  it("分兵：只派出指定兵力（50 一档），其余留守", () => {
+  it("分兵：只派出指定兵力，其余留守（派出部分照常战斗与收编）", () => {
     const map = makeMap();
     const m = indexMap(map);
     let s = createGame(map, { seed: 23, playerNation: "FRA" });
     const u = unitOf(s, "FRA", "B");
-    s = endTurn(s, m, [{ type: "move", unitId: u.id, to: "C", strength: 50 }]);
+    u.strength = 200;
+    s = endTurn(s, m, [{ type: "move", unitId: u.id, to: "C", strength: 100 }]);
     expect(s.units[u.id].province).toBe("B");
-    expect(s.units[u.id].strength).toBe(50);
+    expect(s.units[u.id].strength).toBe(100);   // 留守
     const moved = unitsIn(s, "C")[0];
-    expect(moved.strength).toBe(50);
+    expect(moved.strength).toBe(130);            // 100 打 50 -> 90 + 收编 40
     expect(s.provinces.C.owner).toBe("FRA");
   });
 
@@ -171,7 +174,7 @@ describe("进攻与战斗结算", () => {
     expect(s.provinces.C.owner).toBe("ITA");
   });
 
-  it("战斗结束后双方兵力与士气发生变化", () => {
+  it("战胜后收编对方残部，兵力上涨（不会越打越少）", () => {
     const map = makeMap();
     const m = indexMap(map);
     let s = createGame(map, { seed: 33, playerNation: "FRA" });
@@ -180,10 +183,21 @@ describe("进攻与战斗结算", () => {
     ita.province = "B";
     ita.strength = 100;
     fra.strength = 200;
-    const itaMoraleBefore = ita.morale;
     s = endTurn(s, m, [{ type: "move", unitId: fra.id, to: "B" }]);
-    const itaAfter = s.units[ita.id];
-    if (itaAfter) expect(itaAfter.morale).toBeLessThan(itaMoraleBefore);
+    expect(s.units[ita.id]).toBeUndefined();               // 被击败收编
+    // 战后 180 + 收编 80 = 260，再与 B 地原有己方 100 同兵种合并 = 360
+    expect(s.units[fra.id].strength).toBe(360)
+  });
+
+  it("空白区守军：兵力不足时打不下（守军不会被打散）", () => {
+    const map = makeMap();
+    const m = indexMap(map);
+    let s = createGame(map, { seed: 37, playerNation: "FRA" });
+    const u = unitOf(s, "FRA", "B");
+    u.strength = 50;
+    s = endTurn(s, m, [{ type: "move", unitId: u.id, to: "C" }]);
+    expect(s.provinces.C.owner).toBeNull();
+    expect(s.units[u.id].province).toBe("B");
   });
 });
 
